@@ -9,18 +9,26 @@ export type RuntimeAISettings = ProviderOverrides & {
 };
 
 const globalStore = globalThis as typeof globalThis & {
-  __zhihangAISettings?: Map<string, RuntimeAISettings>;
+  __zhihangAISettings?: Map<string, { settings: RuntimeAISettings; expiresAt: number }>;
 };
 
-const settingsStore = globalStore.__zhihangAISettings ?? new Map<string, RuntimeAISettings>();
+const settingsStore = globalStore.__zhihangAISettings
+  ?? new Map<string, { settings: RuntimeAISettings; expiresAt: number }>();
 globalStore.__zhihangAISettings = settingsStore;
 
 export function getRuntimeAISettings(sessionId?: string) {
-  return sessionId ? settingsStore.get(sessionId) : undefined;
+  if (!sessionId) return undefined;
+  const entry = settingsStore.get(sessionId);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    settingsStore.delete(sessionId);
+    return undefined;
+  }
+  return entry.settings;
 }
 
 export function saveRuntimeAISettings(sessionId: string, settings: RuntimeAISettings) {
-  settingsStore.set(sessionId, settings);
+  settingsStore.set(sessionId, { settings, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
 }
 
 export function clearRuntimeAISettings(sessionId?: string) {

@@ -31,6 +31,17 @@ export function hasProviderKey(provider: Provider, overrides?: ProviderOverrides
   return Boolean(providerConfig(provider, overrides).apiKey);
 }
 
+export function isAllowedProviderBaseUrl(provider: Provider, value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    if (provider === "deepseek") return url.hostname === "api.deepseek.com";
+    return /^dashscope(?:-[a-z0-9-]+)?\.aliyuncs\.com$/i.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function generateJson(provider: Provider, system: string, user: string, overrides?: ProviderOverrides) {
   const config = providerConfig(provider, overrides);
   if (!config.apiKey) throw new Error(`尚未配置 ${provider === "qwen" ? "QWEN" : "DEEPSEEK"}_API_KEY`);
@@ -51,6 +62,7 @@ export async function generateJson(provider: Provider, system: string, user: str
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
+      max_tokens: 2500,
       stream: false,
       ...providerOptions,
     }),

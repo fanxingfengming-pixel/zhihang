@@ -1,4 +1,5 @@
 import type { AgentName, ApplicationRecord, CareerProfile, JDAnalysis, MatchReport, OfferCandidate } from "@/lib/schemas";
+import { removeEmbeddedInstructionLines } from "@/lib/request-security";
 
 const splitItems = (value: unknown) =>
   String(value || "")
@@ -12,11 +13,12 @@ export function demoResult(agent: AgentName, input: unknown, context: unknown) {
   if (agent === "resume") {
     const resumeText = String(data.resumeText || "").trim();
     if (resumeText) {
-      const lines = resumeText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const safeResumeText = removeEmbeddedInstructionLines(resumeText);
+      const lines = safeResumeText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
       const knownSkills = ["Figma", "Python", "SQL", "Excel", "数据分析", "用户研究", "产品设计", "AI Agent", "大模型", "PPT"];
-      const skills = knownSkills.filter((skill) => resumeText.toLowerCase().includes(skill.toLowerCase()));
+      const skills = knownSkills.filter((skill) => safeResumeText.toLowerCase().includes(skill.toLowerCase()));
       const nameCandidate = lines.find((line) => /^[\u4e00-\u9fa5·]{2,8}$/.test(line)) || "";
-      const targetRole = resumeText.match(/(?:求职意向|目标岗位|求职方向)[：:]?\s*([^\n]+)/)?.[1]?.trim() || "";
+      const targetRole = safeResumeText.match(/(?:求职意向|目标岗位|求职方向)[：:]?\s*([^\n]+)/)?.[1]?.trim() || "";
       const school = lines.find((line) => /大学|学院/.test(line)) || "";
       const projectLine = lines.find((line) => /项目|作品|竞赛/.test(line)) || "";
       return {
@@ -24,7 +26,7 @@ export function demoResult(agent: AgentName, input: unknown, context: unknown) {
         skills,
         strengths: skills.slice(0, 3).map((skill) => `${skill} 相关经历待人工核对`),
         projects: projectLine ? [{ title: projectLine.slice(0, 60), organization: "", period: "", role: "", details: [], result: "" }] : [],
-        resumeMarkdown: resumeText,
+        resumeMarkdown: safeResumeText,
         updatedAt: new Date().toISOString(),
       };
     }
@@ -311,7 +313,7 @@ export function demoResult(agent: AgentName, input: unknown, context: unknown) {
   }
 
   if (agent === "jd") {
-    const text = String(input || "");
+    const text = removeEmbeddedInstructionLines(String(input || ""));
     const known = ["Python", "SQL", "Excel", "Figma", "数据分析", "产品", "AI", "大模型", "沟通", "PPT"];
     const keywords = known.filter((word) => text.toLowerCase().includes(word.toLowerCase()));
     return {

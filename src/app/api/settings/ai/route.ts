@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { z } from "zod";
+import { isAllowedProviderBaseUrl } from "@/lib/ai/client";
 import { clearRuntimeAISettings, getRuntimeAISettings, saveRuntimeAISettings } from "@/lib/ai/runtime-settings";
+import { privateJson, protectMutation, readJsonWithLimit, RequestSecurityError, requestSecurityError } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 
@@ -11,11 +13,22 @@ const SettingsSchema = z.object({
   model: z.string().trim().min(1, "请输入模型名称").max(100),
   apiKey: z.string().trim().max(500).optional(),
   demoMode: z.boolean(),
+}).superRefine((value, context) => {
+  if (!isAllowedProviderBaseUrl(value.provider, value.baseUrl)) {
+    context.addIssue({
+      code: "custom",
+      path: ["baseUrl"],
+      message: value.provider === "deepseek"
+        ? "DeepSeek 仅允许使用 https://api.deepseek.com"
+        : "Qwen 仅允许使用阿里云 DashScope 官方 HTTPS 地址",
+    });
+  }
 });
 
 export async function POST(request: Request) {
   try {
-    const input = SettingsSchema.parse(await request.json());
+    protectMutation(request, "ai-settings", { limit: 15 });
+    const input = SettingsSchema.parse(await readJsonWithLimit(request, 8 * 1024));
     const cookieStore = await cookies();
     const currentSessionId = cookieStore.get("zhihang_ai_session")?.value;
     const sessionId = currentSessionId || randomUUID();
@@ -31,17 +44,24 @@ export async function POST(request: Request) {
       path: "/",
       maxAge: 60 * 60 * 24,
     });
-    return Response.json({ ok: true, hasApiKey: Boolean(input.apiKey || current?.apiKey) });
+    return privateJson({ ok: true, hasApiKey: Boolean(input.apiKey || current?.apiKey) });
   } catch (error) {
-    if (error instanceof z.ZodError) return Response.json({ error: error.issues[0]?.message || "设置格式不正确" }, { status: 400 });
-    return Response.json({ error: error instanceof Error ? error.message : "保存失败" }, { status: 500 });
+    if (error instanceof RequestSecurityError) return requestSecurityError(error);
+    if (error instanceof z.ZodError) return privateJson({ error: error.issues[0]?.message || "设置格式不正确" }, { status: 400 });
+    return privateJson({ error: "保存失败，请稍后重试。" }, { status: 500 });
   }
 }
 
-export async function DELETE() {
-  const cookieStore = await cookies();
-  const sessionId = cookieStore.get("zhihang_ai_session")?.value;
-  clearRuntimeAISettings(sessionId);
-  cookieStore.delete("zhihang_ai_session");
-  return Response.json({ ok: true });
+export async function DELETE(request: Request) {
+  try {
+    protectMutation(request, "ai-settings", { limit: 15 });
+    const cookieStore = await cookies();
+    const sessionId = cookieStore.get("zhihang_ai_session")?.value;
+    clearRuntimeAISettings(sessionId);
+    cookieStore.delete("zhihang_ai_session");
+    return privateJson({ ok: true });
+  } catch (error) {
+    if (error instanceof RequestSecurityError) return requestSecurityError(error);
+    return privateJson({ error: "清除设置失败，请稍后重试。" }, { status: 500 });
+  }
 }
