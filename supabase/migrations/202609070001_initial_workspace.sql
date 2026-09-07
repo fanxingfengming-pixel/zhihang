@@ -1,6 +1,8 @@
 create table if not exists public.user_workspaces (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  snapshot jsonb not null,
+  snapshot jsonb not null
+    constraint user_workspaces_snapshot_object
+    check (jsonb_typeof(snapshot) = 'object'),
   updated_at timestamptz not null default now()
 );
 

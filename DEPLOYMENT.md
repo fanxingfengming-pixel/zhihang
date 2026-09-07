@@ -12,6 +12,8 @@
 3. 在 Supabase SQL Editor 中执行 `supabase/migrations/202609070001_initial_workspace.sql`；也可以安装 Supabase CLI 后执行迁移。
 4. 在 Authentication 的 URL Configuration 中加入本地地址 `http://localhost:3000` 和最终 Vercel 域名。
 
+迁移已显式配置 Data API 所需的表权限、RLS 和逐操作策略，可兼容 Supabase 2026 年起“新表默认不自动暴露”的安全默认值。
+
 本地 `.env.local` 增加：
 
 ```dotenv
@@ -32,6 +34,15 @@ pnpm test
 pnpm build
 pnpm dev
 ```
+
+如已安装 Supabase CLI 与 Docker，还应在本地数据库运行策略测试：
+
+```powershell
+supabase start
+supabase test db
+```
+
+测试文件位于 `supabase/tests/user_workspaces_rls.test.sql`，覆盖匿名拒绝、用户隔离、所有者增删改查和 JSON 数据库约束。
 
 打开 `http://localhost:3000/settings#cloud-sync`，注册账号，然后测试“上传本机数据”和“从云端恢复”。若 Supabase 开启了邮箱确认，需要先点击验证邮件。
 
