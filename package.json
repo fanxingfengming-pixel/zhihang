@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:evals": "vitest run tests/prompt-evals.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -312,7 +312,7 @@ export function demoResult(agent: AgentName, input: unknown, context: unknown) {
 
   if (agent === "jd") {
     const text = String(input || "");
-    const known = ["Python", "SQL", "Excel", "数据分析", "产品", "AI", "大模型", "沟通", "PPT"];
+    const known = ["Python", "SQL", "Excel", "Figma", "数据分析", "产品", "AI", "大模型", "沟通", "PPT"];
     const keywords = known.filter((word) => text.toLowerCase().includes(word.toLowerCase()));
     return {
       jobTitle: text.match(/(?:岗位|职位)[：:]?\s*([^\n，。]+)/)?.[1]?.trim() || "待确认岗位",

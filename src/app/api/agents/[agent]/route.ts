@@ -3,41 +3,12 @@ import { getRuntimeAISettings } from "@/lib/ai/runtime-settings";
 import { prompts } from "@/lib/ai/prompts";
 import { demoResult } from "@/lib/demo";
 import { secureAgentResult } from "@/lib/agent-guards";
-import {
-  AgentRequestSchema,
-  ApplicationManagementSchema,
-  CareerPositioningSchema,
-  CareerProfileSchema,
-  GrowthPlanSchema,
-  JDAnalysisSchema,
-  InterviewAgentSchema,
-  MatchReportSchema,
-  OfferDecisionSchema,
-  ResumeOptimizationSchema,
-  SkillGapAnalysisSchema,
-  type AgentName,
-} from "@/lib/schemas";
+import { AGENT_OUTPUT_SCHEMAS, isAgentName } from "@/lib/agent-registry";
+import { AgentRequestSchema } from "@/lib/schemas";
 import { ZodError } from "zod";
 import { cookies } from "next/headers";
 
 export const runtime = "nodejs";
-
-const outputSchemas = {
-  resume: CareerProfileSchema,
-  jd: JDAnalysisSchema,
-  match: MatchReportSchema,
-  optimize: ResumeOptimizationSchema,
-  interview: InterviewAgentSchema,
-  career: CareerPositioningSchema,
-  gap: SkillGapAnalysisSchema,
-  plan: GrowthPlanSchema,
-  application: ApplicationManagementSchema,
-  offer: OfferDecisionSchema,
-};
-
-function isAgentName(value: string): value is AgentName {
-  return value === "resume" || value === "jd" || value === "match" || value === "optimize" || value === "interview" || value === "career" || value === "gap" || value === "plan" || value === "application" || value === "offer";
-}
 
 function parseModelJson(raw: string) {
   const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -64,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ age
       ? demoResult(agent, body.input, body.context)
       : parseModelJson(await generateJson(provider, prompts[agent], JSON.stringify({ input: body.input, context: body.context }), runtimeSettings));
 
-    const parsed = outputSchemas[agent].parse(result);
+    const parsed = AGENT_OUTPUT_SCHEMAS[agent].parse(result);
     const validated = secureAgentResult(agent, body.input, body.context, parsed);
     return Response.json({ data: validated, meta: { provider: useDemo ? "demo" : provider, demo: useDemo } });
   } catch (error) {
