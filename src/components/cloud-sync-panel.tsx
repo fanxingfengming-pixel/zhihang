@@ -148,8 +148,8 @@ function ConfiguredCloudSyncPanel() {
         </div>
       ) : (
         <form className="cloud-login-form" onSubmit={(event: FormEvent) => { event.preventDefault(); void authenticate("signin"); }}>
-          <label><span>邮箱</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
-          <label><span>密码</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="至少 6 位" /></label>
+          <label><span>邮箱</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" spellCheck={false} placeholder="name@example.com" /></label>
+          <label><span>密码</span><input name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="至少 6 位…" /></label>
           <div>
             <button type="submit" className="primary-button" disabled={busy}><LogIn size={15} />登录</button>
             <button type="button" className="secondary-button" disabled={busy} onClick={() => authenticate("signup")}><UserPlus size={15} />注册</button>

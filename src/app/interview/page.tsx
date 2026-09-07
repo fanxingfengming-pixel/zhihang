@@ -218,7 +218,7 @@ function InterviewContent() {
                   </div>
                   <label className="answer-box">
                     <span>输入你的回答 <small>{answer.length} 字</small></span>
-                    <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="建议先完整作答，再查看 AI 反馈。请使用真实经历，不确定的数据不要编造。" />
+                    <textarea name="interview-answer" aria-label="输入你的回答" value={answer} onChange={(event) => setAnswer(event.target.value)} autoComplete="off" placeholder="建议先完整作答，再查看 AI 反馈。请使用真实经历，不确定的数据不要编造。" />
                   </label>
                   {error ? <div className="interview-inline-error" role="alert"><TriangleAlert size={15} />{error}</div> : null}
                   <div className="interview-actions">

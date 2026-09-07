@@ -106,7 +106,7 @@ export function ResumeChatBuilder({ onClose, onApply }: { onClose: () => void; o
           ) : (
             <form className="builder-input-area" onSubmit={submitAnswer}>
               <div className="quick-replies">{question.examples.map((example) => <button type="button" key={example} onClick={() => setValue(example)}>{example}</button>)}</div>
-               <div className="builder-input"><input value={value} onChange={(event) => setValue(event.target.value)} aria-label="回答当前问题" placeholder={processing ? "Agent 正在整理，请稍候…" : question.placeholder} disabled={processing} autoFocus /><button type="submit" disabled={!value.trim() || processing} aria-label="发送回答"><Send size={16} /></button></div>
+               <div className="builder-input"><input name="resume-builder-answer" value={value} onChange={(event) => setValue(event.target.value)} aria-label="回答当前问题" autoComplete="off" placeholder={processing ? "Agent 正在整理，请稍候…" : question.placeholder} disabled={processing} autoFocus /><button type="submit" disabled={!value.trim() || processing} aria-label="发送回答"><Send size={16} /></button></div>
                <p><ArrowLeft size={12} />{processing ? "正在调用简历构建 Agent" : "直接说事实即可，后续仍可手动修改"}</p>
             </form>
           )}

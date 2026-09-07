@@ -19,6 +19,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useCareerProfile } from "@/hooks/use-career-profile";
+import { countProjectsMissingResults } from "@/lib/career-profile-metrics";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [search, setSearch] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const projectsMissingResults = countProjectsMissingResults(profile);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -58,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-frame">
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
       {open ? <button className="mobile-scrim" onClick={() => setOpen(false)} aria-label="关闭导航" /> : null}
       <aside className={`app-sidebar ${open ? "is-open" : ""}`}>
         <div className="sidebar-top">
@@ -99,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button className="icon-button menu-button" onClick={() => setOpen(true)} aria-label="打开导航"><Menu size={20} /></button>
           <form className="topbar-search" onSubmit={submitSearch}>
             <button className="topbar-search-submit" type="submit" aria-label="提交搜索"><Search size={16} /></button>
-            <input ref={searchRef} value={search} onChange={(event) => setSearch(event.target.value)} aria-label="全局搜索" placeholder="搜索岗位、任务或建议" />
+            <input ref={searchRef} name="global-search" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="全局搜索" autoComplete="off" placeholder="搜索岗位、任务或建议…" />
             <kbd>Ctrl K</kbd>
           </form>
           <div className="topbar-actions">
@@ -108,14 +111,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             {notificationsOpen ? (
               <div className="notification-panel" role="status">
                 <div className="notification-head"><b>最近提醒</b><button onClick={() => setNotificationsOpen(false)} aria-label="关闭通知"><X size={14} /></button></div>
-                <p><i />字节跳动岗位匹配度更新至 87%</p>
-                <p><i />你的项目经历还有 3 处可量化</p>
-                <Link href="/workspace" onClick={() => setNotificationsOpen(false)}>去处理简历建议 <ChevronRight size={13} /></Link>
+                <p><i />求职档案已记录 {profile.skills.length} 项技能</p>
+                <p><i />{projectsMissingResults ? `${projectsMissingResults} 段项目经历还缺少成果` : "项目经历成果信息已补齐"}</p>
+                <Link href="/workspace" onClick={() => setNotificationsOpen(false)}>查看求职档案 <ChevronRight size={13} /></Link>
               </div>
             ) : null}
           </div>
         </header>
-        <main className="page-content">{children}</main>
+        <main id="main-content" className="page-content" tabIndex={-1}>{children}</main>
       </section>
     </div>
   );

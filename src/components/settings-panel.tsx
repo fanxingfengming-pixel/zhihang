@@ -96,16 +96,16 @@ export function SettingsPanel({ initial, fallback }: { initial: AISettingsView; 
 
         <section className="settings-section">
           <div className="settings-section-title"><span>01</span><div><h3>运行方式</h3><p>调试界面已经隐藏，这里只保留职航自己的中文选项。</p></div></div>
-          <label className="toggle-row"><div><b>使用演示模式</b><small>开启后使用本地演示数据，不会产生接口费用。</small></div><input type="checkbox" checked={settings.demoMode} onChange={(event) => setSettings((current) => ({ ...current, demoMode: event.target.checked }))} /><span aria-hidden="true" /></label>
+          <label className="toggle-row"><div><b>使用演示模式</b><small>开启后使用本地演示数据，不会产生接口费用。</small></div><input name="demo-mode" type="checkbox" checked={settings.demoMode} onChange={(event) => setSettings((current) => ({ ...current, demoMode: event.target.checked }))} /><span aria-hidden="true" /></label>
         </section>
 
         <section className="settings-section">
           <div className="settings-section-title"><span>02</span><div><h3>接口连接</h3><p>支持兼容 OpenAI 请求格式的 DeepSeek 与通义千问。</p></div></div>
           <div className="settings-fields">
             <label><span>接口服务商</span><select value={settings.provider} onChange={(event) => changeProvider(event.target.value as Provider)} disabled={settings.demoMode}><option value="deepseek">深度求索（DeepSeek）</option><option value="qwen">通义千问（阿里云百炼）</option></select></label>
-            <label><span>模型名称</span><input value={settings.model} onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))} disabled={settings.demoMode} placeholder="请输入模型名称" /></label>
-            <label className="wide"><span>接口地址</span><input value={settings.baseUrl} onChange={(event) => setSettings((current) => ({ ...current, baseUrl: event.target.value }))} disabled={settings.demoMode} placeholder="请输入完整接口地址" /></label>
-            <label className="wide"><span>接口密钥</span><div className="secret-field"><KeyRound size={15} /><input type={showKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={settings.demoMode} placeholder={settings.hasApiKey ? "密钥已配置；留空可继续使用" : "请输入接口密钥"} autoComplete="off" /><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏接口密钥" : "显示接口密钥"}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
+            <label><span>模型名称</span><input name="model" value={settings.model} onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))} disabled={settings.demoMode} autoComplete="off" spellCheck={false} placeholder="请输入模型名称…" /></label>
+            <label className="wide"><span>接口地址</span><input name="base-url" type="url" value={settings.baseUrl} onChange={(event) => setSettings((current) => ({ ...current, baseUrl: event.target.value }))} disabled={settings.demoMode} autoComplete="url" spellCheck={false} placeholder="请输入完整接口地址…" /></label>
+            <label className="wide"><span>接口密钥</span><div className="secret-field"><KeyRound size={15} /><input name="api-key" type={showKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={settings.demoMode} placeholder={settings.hasApiKey ? "密钥已配置；留空可继续使用…" : "请输入接口密钥…"} autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏接口密钥" : "显示接口密钥"}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
           </div>
           <div className="security-note"><ShieldCheck size={17} /><p><b>密钥不会写入网页源码或浏览器长期存储。</b><span>当前版本仅保存在本地服务的运行内存中，服务重启后需要重新填写；生产部署应改用服务端环境变量或密钥管理服务。</span></p></div>
         </section>

@@ -6,25 +6,25 @@ import { useState, type FormEvent } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { AgentTrace, type AgentTraceStep } from "@/components/ui/agent-trace";
 import { saveCareerProfile } from "@/lib/career-profile-store";
+import { useApplications } from "@/hooks/use-applications";
 import { useCareerProfile } from "@/hooks/use-career-profile";
-import { useCareerIntelligenceHistory } from "@/hooks/use-insight-history";
+import { useCareerIntelligenceHistory, useInterviewHistory } from "@/hooks/use-insight-history";
 import { runAgent } from "@/lib/agent-client";
+import { calculateProfileCompletion } from "@/lib/career-profile-metrics";
 import { saveCareerIntelligence } from "@/lib/insight-history-store";
 import type { CareerPositioning, GrowthPlan, SkillGapAnalysis } from "@/lib/schemas";
-
-const journey = [
-  { number: "01", title: "职业画像", note: "方向已确认", detail: "结合专业、兴趣与项目经历，生成你的求职能力画像。", status: "已完成", icon: Fingerprint, href: "/career" },
-  { number: "02", title: "简历构建", note: "当前评分 82", detail: "通过 6 个简单问题生成草稿，再强化项目成果与岗位关键词。", status: "进行中", icon: FileText, href: "/workspace?mode=build" },
-  { number: "03", title: "岗位匹配", note: "12 个高匹配岗位", detail: "根据职业目标和简历证据，找到更值得投入的机会。", status: "可开始", icon: BriefcaseBusiness, href: "/jobs" },
-  { number: "04", title: "投递准备", note: "3 个岗位待准备", detail: "为目标岗位定制简历、求职信与投递节奏。", status: "待解锁", icon: Target, href: "/workspace" },
-  { number: "05", title: "面试训练", note: "AI 已就绪", detail: "围绕岗位能力模型进行模拟问答与表达复盘。", status: "可开始", icon: Mic2, href: "/interview" },
-  { number: "06", title: "投递与 Offer", note: "全流程记录", detail: "跟踪每次投递的下一步，并在信息核实后比较 Offer。", status: "可开始", icon: BriefcaseBusiness, href: "/applications" },
-];
 
 export default function CareerCenterPage() {
   const [editingTarget, setEditingTarget] = useState(false);
   const [saved, setSaved] = useState(false);
   const profile = useCareerProfile();
+  const applications = useApplications().filter((item) => !item.notes.includes("示例记录"));
+  const interviewHistory = useInterviewHistory();
+  const profileCompletion = calculateProfileCompletion(profile);
+  const parsedUpdatedAt = Date.parse(profile.updatedAt);
+  const profileUpdatedLabel = Number.isNaN(parsedUpdatedAt)
+    ? "尚未保存"
+    : new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date(parsedUpdatedAt));
   const target = {
     role: profile.basics.targetRole || "AI 产品经理",
     cities: profile.basics.location || "杭州 / 上海",
@@ -37,6 +37,15 @@ export default function CareerCenterPage() {
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
   const [intelligenceStage, setIntelligenceStage] = useState<"career" | "gap" | "plan" | null>(null);
   const [intelligenceError, setIntelligenceError] = useState("");
+  const journey = [
+    { number: "01", title: "职业画像", note: `${profileCompletion}% 完整`, detail: "结合专业、兴趣与项目经历，生成你的求职能力画像。", status: profileCompletion === 100 ? "已完成" : "进行中", icon: Fingerprint, href: "/career" },
+    { number: "02", title: "简历构建", note: profile.resumeMarkdown ? "基础简历已生成" : "等待生成基础简历", detail: "通过 6 个简单问题生成草稿，再强化项目成果与岗位关键词。", status: profile.resumeMarkdown ? "已完成" : "可开始", icon: FileText, href: "/workspace?mode=build" },
+    { number: "03", title: "岗位匹配", note: "从目标岗位开始分析", detail: "根据职业目标和简历证据，找到更值得投入的机会。", status: "可开始", icon: BriefcaseBusiness, href: "/jobs" },
+    { number: "04", title: "投递准备", note: `${applications.length} 条真实投递记录`, detail: "为目标岗位定制简历、求职信与投递节奏。", status: applications.length ? "进行中" : "可开始", icon: Target, href: "/workspace" },
+    { number: "05", title: "面试训练", note: `${interviewHistory.length} 次练习`, detail: "围绕岗位能力模型进行模拟问答与表达复盘。", status: interviewHistory.length ? "进行中" : "可开始", icon: Mic2, href: "/interview" },
+    { number: "06", title: "投递与 Offer", note: `${applications.filter((item) => item.stage === "offer").length} 个已记录 Offer`, detail: "跟踪每次投递的下一步，并在信息核实后比较 Offer。", status: applications.some((item) => item.stage === "offer") ? "进行中" : "可开始", icon: BriefcaseBusiness, href: "/applications" },
+  ];
+  const completedJourneySteps = journey.filter((item) => item.status === "已完成").length;
 
   function openTargetEditor() {
     setTargetDraft(target);
@@ -102,11 +111,11 @@ export default function CareerCenterPage() {
           </div>
         </article>
         <article className="growth-card">
-          <div className="growth-top"><div><p className="eyebrow">GROWTH INDEX</p><h2>本周成长</h2></div><BarChart3 size={20} /></div>
-          <strong className="growth-number">+6<small>pts</small></strong>
-          <ProgressLine value={72} compact />
-          <p>项目表达提升最明显。下一步补充数据分析证据，可继续拉高岗位竞争力。</p>
-          <div className="growth-foot"><span>连续成长</span><b>3 周</b></div>
+          <div className="growth-top"><div><p className="eyebrow">PROFILE PROGRESS</p><h2>档案进度</h2></div><BarChart3 size={20} aria-hidden="true" /></div>
+          <strong className="growth-number">{profileCompletion}<small>%</small></strong>
+          <ProgressLine value={profileCompletion} compact />
+          <p>{profileCompletion === 100 ? "基础档案已经完整，可以继续生成职业报告并针对岗位验证能力证据。" : "继续补充真实的基础信息、技能和项目经历，后续 Agent 的分析会更准确。"}</p>
+          <div className="growth-foot"><span>档案更新时间</span><b>{profileUpdatedLabel}</b></div>
         </article>
       </section>
 
@@ -148,10 +157,10 @@ export default function CareerCenterPage() {
       </section>
 
       <section className="journey-section">
-        <div className="section-title-row"><div><p className="eyebrow">YOUR ROUTE</p><h2>求职成长路径</h2></div><p className="journey-progress">已完成 <b>1 / 6</b></p></div>
+        <div className="section-title-row"><div><p className="eyebrow">YOUR ROUTE</p><h2>求职成长路径</h2></div><p className="journey-progress">已完成 <b>{completedJourneySteps} / 6</b></p></div>
         <div className="journey-list">
-          {journey.map(({ number, title, note, detail, status, icon: Icon, href }, index) => {
-            const done = index === 0; const active = index === 1;
+          {journey.map(({ number, title, note, detail, status, icon: Icon, href }) => {
+            const done = status === "已完成"; const active = status === "进行中";
             return (
               <article key={number} className={`journey-item ${done ? "done" : ""} ${active ? "active" : ""}`}>
                 <div className="journey-marker">{done ? <Check size={16} /> : number}</div>
@@ -169,10 +178,10 @@ export default function CareerCenterPage() {
         <div className="dialog-backdrop" role="presentation">
           <form className="target-dialog" role="dialog" aria-modal="true" aria-labelledby="target-dialog-title" onSubmit={saveTarget}>
             <div className="dialog-title"><div><p className="eyebrow">UPDATE DESTINATION</p><h2 id="target-dialog-title">调整求职目标</h2></div><button type="button" onClick={() => setEditingTarget(false)} aria-label="关闭"><X size={18} /></button></div>
-            <label>目标岗位<input value={targetDraft.role} onChange={(event) => setTargetDraft((current) => ({ ...current, role: event.target.value }))} required /></label>
-            <label>目标城市<input value={targetDraft.cities} onChange={(event) => setTargetDraft((current) => ({ ...current, cities: event.target.value }))} required /></label>
-            <label>目标行业<input value={targetDraft.industry} onChange={(event) => setTargetDraft((current) => ({ ...current, industry: event.target.value }))} required /></label>
-            <label>求职阶段<input value={targetDraft.stage} onChange={(event) => setTargetDraft((current) => ({ ...current, stage: event.target.value }))} required /></label>
+            <label>目标岗位<input name="target-role" value={targetDraft.role} onChange={(event) => setTargetDraft((current) => ({ ...current, role: event.target.value }))} autoComplete="organization-title" required /></label>
+            <label>目标城市<input name="target-cities" value={targetDraft.cities} onChange={(event) => setTargetDraft((current) => ({ ...current, cities: event.target.value }))} autoComplete="address-level2" required /></label>
+            <label>目标行业<input name="target-industry" value={targetDraft.industry} onChange={(event) => setTargetDraft((current) => ({ ...current, industry: event.target.value }))} autoComplete="off" required /></label>
+            <label>求职阶段<input name="career-stage" value={targetDraft.stage} onChange={(event) => setTargetDraft((current) => ({ ...current, stage: event.target.value }))} autoComplete="off" required /></label>
             <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setEditingTarget(false)}>取消</button><button type="submit" className="primary-button"><Save size={15} />保存目标</button></div>
           </form>
         </div>

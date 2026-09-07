@@ -68,7 +68,7 @@ export function ResumeImportDialog({ onClose, onApply }: { onClose: () => void; 
             {loading === "extract" ? <RefreshCw size={25} className="spin" /> : <FileText size={25} />}
             <b>{loading === "extract" ? "正在提取文件文字…" : "选择 PDF、DOCX、TXT 或 Markdown"}</b>
             <span>文件最大 5MB；扫描版 PDF 暂不支持 OCR</span>
-            <input type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={(event) => void chooseFile(event)} disabled={Boolean(loading)} />
+            <input name="resume-file" aria-label="选择要导入的简历文件" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" onChange={(event) => void chooseFile(event)} disabled={Boolean(loading)} />
           </label>
           {error ? <p className="resume-import-error" role="alert">{error}</p> : null}
           {extracted ? <div className="resume-extracted"><div><FileText size={16} /><p><b>{extracted.fileName}</b><small>{extracted.fileType.toUpperCase()} · 已提取 {extracted.characterCount.toLocaleString("zh-CN")} 字符</small></p></div>{extracted.warnings.map((warning) => <p key={warning}>{warning}</p>)}<textarea aria-label="提取出的简历文字" value={extracted.text} readOnly /></div> : null}

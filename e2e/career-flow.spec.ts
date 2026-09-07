@@ -4,9 +4,10 @@ test("真实材料导入到 Offer 比较的核心链路", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/settings");
   const settingsResponse = await page.request.post("/api/settings/ai", {
+    headers: { Origin: "http://localhost:3000" },
     data: {
       provider: "qwen",
-      baseUrl: "https://example.com/compatible-mode/v1",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: "qwen-plus",
       demoMode: true,
     },

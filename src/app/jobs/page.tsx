@@ -167,7 +167,7 @@ function JobsContent() {
       {job && addedJobId === job.id ? <p className="page-feedback" role="status"><Check size={13} />已加入投递中心，可继续记录准备、投递和面试进度</p> : null}
       <section className="jobs-workbench">
         <aside className="job-list-panel">
-          <div className="job-search"><Search size={16} /><input aria-label="搜索岗位" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="公司、岗位或技能" /></div>
+          <div className="job-search"><Search size={16} aria-hidden="true" /><input name="job-search" aria-label="搜索岗位" value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" placeholder="公司、岗位或技能…" /></div>
           <div className="job-filters">
             <select aria-label="筛选城市" value={location} onChange={(event) => setLocation(event.target.value)}><option value="all">全部城市</option><option value="hzsh">杭州 / 上海</option><option value="sz">深圳</option></select>
             <select aria-label="排序方式" value={sort} onChange={(event) => setSort(event.target.value)}><option value="match">匹配度优先</option><option value="latest">最近更新</option></select>
@@ -223,7 +223,7 @@ function JobsContent() {
       {jdDialogOpen ? <div className="dialog-backdrop" role="presentation"><form className="jd-import-dialog" role="dialog" aria-modal="true" aria-labelledby="jd-import-title" onSubmit={importJD}>
         <div className="dialog-title"><div><p className="eyebrow">CUSTOM JOB DESCRIPTION</p><h2 id="jd-import-title">粘贴真实 JD</h2></div><button type="button" onClick={() => setJdDialogOpen(false)} aria-label="关闭 JD 导入"><X size={18} /></button></div>
         <p>请粘贴公司、岗位职责和任职要求。系统不会自动投递，也不会保存招聘网站账号信息。</p>
-        <label>JD 原文<textarea value={jdText} onChange={(event) => setJdText(event.target.value)} placeholder="例如：公司名称、岗位名称、岗位职责、任职要求……" minLength={30} required /></label>
+        <label>JD 原文<textarea name="jd-text" value={jdText} onChange={(event) => setJdText(event.target.value)} autoComplete="off" placeholder="例如：公司名称、岗位名称、岗位职责、任职要求……" minLength={30} required /></label>
         <small>{jdText.length} 字 · 建议保留完整职责与要求</small>
         {jdImportError ? <div className="application-error"><TriangleAlert size={14} />{jdImportError}</div> : null}
         <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setJdDialogOpen(false)}>取消</button><button type="submit" className="primary-button" disabled={jdText.trim().length < 30 || jdImporting}>{jdImporting ? <><RefreshCw size={14} className="spin" />JD 与匹配 Agent 正在协作…</> : <><Sparkles size={14} />解析并匹配</>}</button></div>

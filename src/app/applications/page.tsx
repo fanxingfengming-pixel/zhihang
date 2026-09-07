@@ -80,6 +80,8 @@ export default function ApplicationsPage() {
   }
 
   function removeApplication(id: string) {
+    const application = applications.find((item) => item.id === id);
+    if (!window.confirm(`确认删除“${application?.company || "这条"}”投递记录？删除后无法撤销。`)) return;
     saveApplications(applications.filter((item) => item.id !== id));
     resetManagerReport();
   }
@@ -169,8 +171,8 @@ export default function ApplicationsPage() {
             {activeApplications.length ? activeApplications.map((item) => <article key={item.id} className="application-row">
               <span className="company-mark">{item.company.slice(0, 1)}</span>
               <div className="application-main"><small>{item.company}</small><b>{item.role}</b><p>{item.nextAction || "尚未填写下一步行动"}</p></div>
-              <label><span>阶段</span><select value={item.stage} onChange={(event) => updateApplication(item.id, { stage: event.target.value as ApplicationStage })}>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
-              <label><span>日期</span><input type="date" value={item.deadline} onChange={(event) => updateApplication(item.id, { deadline: event.target.value })} /></label>
+              <label><span>阶段</span><select name={`stage-${item.id}`} value={item.stage} onChange={(event) => updateApplication(item.id, { stage: event.target.value as ApplicationStage })}>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
+              <label><span>日期</span><input name={`deadline-${item.id}`} type="date" value={item.deadline} onChange={(event) => updateApplication(item.id, { deadline: event.target.value })} /></label>
               <div className="application-links">{item.jobId ? <Link href={`/jobs?job=${item.jobId}`}>岗位详情<ArrowRight size={12} /></Link> : null}<button onClick={() => removeApplication(item.id)} aria-label={`删除 ${item.company} ${item.role}`}><Trash2 size={13} /></button></div>
             </article>) : <div className="applications-empty"><ClipboardCheck size={23} /><h3>还没有投递记录</h3><p>先添加一个感兴趣的岗位，Agent 才能根据真实进度整理下一步。</p><button className="secondary-button" onClick={() => setAddOpen(true)}>添加第一条记录</button></div>}
           </div>
@@ -196,14 +198,14 @@ export default function ApplicationsPage() {
             {offers.map((offer, index) => <article className="offer-card" key={offer.id}>
               <div className="offer-card-title"><span>{String(index + 1).padStart(2, "0")}</span><h3>Offer {String.fromCharCode(65 + index)}</h3>{offers.length > 2 ? <button onClick={() => setOffers((current) => current.filter((item) => item.id !== offer.id))} aria-label="删除这份 Offer"><X size={13} /></button> : null}</div>
               <div className="offer-fields">
-                <label>公司<input value={offer.company} onChange={(event) => updateOffer(offer.id, "company", event.target.value)} placeholder="以书面 Offer 为准" /></label>
-                <label>岗位<input value={offer.role} onChange={(event) => updateOffer(offer.id, "role", event.target.value)} placeholder="岗位名称" /></label>
-                <label>城市<input value={offer.location} onChange={(event) => updateOffer(offer.id, "location", event.target.value)} placeholder="工作城市" /></label>
-                <label>税前月薪<input type="number" min="0" value={offer.monthlySalary || ""} onChange={(event) => updateOffer(offer.id, "monthlySalary", Number(event.target.value))} placeholder="元" /></label>
-                <label>发薪月数<input type="number" min="0" step="0.5" value={offer.salaryMonths || ""} onChange={(event) => updateOffer(offer.id, "salaryMonths", Number(event.target.value))} /></label>
-                <label>已确认奖金<input type="number" min="0" value={offer.bonus || ""} onChange={(event) => updateOffer(offer.id, "bonus", Number(event.target.value))} placeholder="元" /></label>
-                <label className="wide">成长信息<input value={offer.growth} onChange={(event) => updateOffer(offer.id, "growth", event.target.value)} placeholder="导师、业务方向、成长路径；未知就留空" /></label>
-                <label className="wide">工作节奏<input value={offer.workLife} onChange={(event) => updateOffer(offer.id, "workLife", event.target.value)} placeholder="仅填写已核实信息" /></label>
+                <label>公司<input name={`company-${offer.id}`} value={offer.company} onChange={(event) => updateOffer(offer.id, "company", event.target.value)} autoComplete="organization" placeholder="以书面 Offer 为准…" /></label>
+                <label>岗位<input name={`role-${offer.id}`} value={offer.role} onChange={(event) => updateOffer(offer.id, "role", event.target.value)} autoComplete="organization-title" placeholder="岗位名称…" /></label>
+                <label>城市<input name={`location-${offer.id}`} value={offer.location} onChange={(event) => updateOffer(offer.id, "location", event.target.value)} autoComplete="address-level2" placeholder="工作城市…" /></label>
+                <label>税前月薪<input name={`salary-${offer.id}`} type="number" min="0" inputMode="numeric" value={offer.monthlySalary || ""} onChange={(event) => updateOffer(offer.id, "monthlySalary", Number(event.target.value))} placeholder="元…" /></label>
+                <label>发薪月数<input name={`salary-months-${offer.id}`} type="number" min="0" step="0.5" inputMode="decimal" value={offer.salaryMonths || ""} onChange={(event) => updateOffer(offer.id, "salaryMonths", Number(event.target.value))} /></label>
+                <label>已确认奖金<input name={`bonus-${offer.id}`} type="number" min="0" inputMode="numeric" value={offer.bonus || ""} onChange={(event) => updateOffer(offer.id, "bonus", Number(event.target.value))} placeholder="元…" /></label>
+                <label className="wide">成长信息<input name={`growth-${offer.id}`} value={offer.growth} onChange={(event) => updateOffer(offer.id, "growth", event.target.value)} autoComplete="off" placeholder="导师、业务方向、成长路径；未知就留空…" /></label>
+                <label className="wide">工作节奏<input name={`work-life-${offer.id}`} value={offer.workLife} onChange={(event) => updateOffer(offer.id, "workLife", event.target.value)} autoComplete="off" placeholder="仅填写已核实信息…" /></label>
               </div>
             </article>)}
             <button className="add-offer-button" onClick={() => setOffers((current) => [...current, emptyOffer(`offer-${Date.now()}`)])}><Plus size={14} />再添加一份 Offer</button>
@@ -225,11 +227,11 @@ export default function ApplicationsPage() {
 
       {addOpen ? <div className="dialog-backdrop" role="presentation"><form className="application-dialog" role="dialog" aria-modal="true" aria-labelledby="application-dialog-title" onSubmit={addApplication}>
         <div className="dialog-title"><div><p className="eyebrow">NEW APPLICATION</p><h2 id="application-dialog-title">添加投递记录</h2></div><button type="button" onClick={() => setAddOpen(false)} aria-label="关闭"><X size={18} /></button></div>
-        <label>公司<input required value={draft.company} onChange={(event) => setDraft((current) => ({ ...current, company: event.target.value }))} /></label>
-        <label>岗位<input required value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))} /></label>
-        <label>当前阶段<select value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as ApplicationDraft["stage"] }))}>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
-        <label>截止或跟进日期<input type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} /></label>
-        <label className="wide">下一步行动<input value={draft.nextAction} onChange={(event) => setDraft((current) => ({ ...current, nextAction: event.target.value }))} placeholder="例如：完成定向简历" /></label>
+        <label>公司<input name="application-company" required value={draft.company} onChange={(event) => setDraft((current) => ({ ...current, company: event.target.value }))} autoComplete="organization" /></label>
+        <label>岗位<input name="application-role" required value={draft.role} onChange={(event) => setDraft((current) => ({ ...current, role: event.target.value }))} autoComplete="organization-title" /></label>
+        <label>当前阶段<select name="application-stage" value={draft.stage} onChange={(event) => setDraft((current) => ({ ...current, stage: event.target.value as ApplicationDraft["stage"] }))}>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
+        <label>截止或跟进日期<input name="application-deadline" type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} /></label>
+        <label className="wide">下一步行动<input name="application-next-action" value={draft.nextAction} onChange={(event) => setDraft((current) => ({ ...current, nextAction: event.target.value }))} autoComplete="off" placeholder="例如：完成定向简历…" /></label>
         <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setAddOpen(false)}>取消</button><button type="submit" className="primary-button"><Plus size={14} />保存记录</button></div>
       </form></div> : null}
     </AppShell>
