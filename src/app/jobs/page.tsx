@@ -1,12 +1,17 @@
 "use client";
 
-import { ArrowRight, Bookmark, BriefcaseBusiness, Check, Clock3, MapPin, Mic2, RefreshCw, Search, Sparkles, TriangleAlert } from "lucide-react";
+import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
+import { AgentTrace, type AgentTraceStep } from "@/components/ui/agent-trace";
 import { useCareerProfile } from "@/hooks/use-career-profile";
-import { runJobAnalysis, type JobAnalysisResult } from "@/lib/job-analysis";
+import { useApplications } from "@/hooks/use-applications";
+import { runAgent } from "@/lib/agent-client";
+import { saveApplications } from "@/lib/application-store";
+import { runJobAnalysis, type JobAnalysisResult, type JobAnalysisStage } from "@/lib/job-analysis";
+import type { JDAnalysis, MatchReport } from "@/lib/schemas";
 import { jobs, type Job } from "@/lib/ui-data";
 
 export default function JobsPage() {
@@ -22,13 +27,22 @@ function JobsContent() {
   const [location, setLocation] = useState("all");
   const [sort, setSort] = useState("match");
   const profile = useCareerProfile();
+  const applications = useApplications();
+  const [customJobs, setCustomJobs] = useState<Job[]>([]);
+  const [jdDialogOpen, setJdDialogOpen] = useState(false);
+  const [jdText, setJdText] = useState("");
+  const [jdImporting, setJdImporting] = useState(false);
+  const [jdImportError, setJdImportError] = useState("");
+  const [addedJobId, setAddedJobId] = useState("");
   const [analyses, setAnalyses] = useState<Record<string, JobAnalysisResult>>({});
+  const [analysisStage, setAnalysisStage] = useState<JobAnalysisStage | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const allJobs = useMemo(() => [...customJobs, ...jobs], [customJobs]);
   const visibleJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const filtered = jobs.filter((item) => {
+    const filtered = allJobs.filter((item) => {
       const matchesQuery = !normalized || [item.company, item.role, ...item.tags].join(" ").toLowerCase().includes(normalized);
       const matchesLocation = location === "all" || (location === "hzsh" && /杭州|上海/.test(item.location)) || (location === "sz" && item.location.includes("深圳"));
       return matchesQuery && matchesLocation;
@@ -37,7 +51,7 @@ function JobsContent() {
     return sort === "match"
       ? filtered.toSorted((a, b) => currentScore(b.id) - currentScore(a.id))
       : filtered.toSorted((a, b) => a.posted.localeCompare(b.posted));
-  }, [analyses, location, profile.updatedAt, query, sort]);
+  }, [allJobs, analyses, location, profile.updatedAt, query, sort]);
   const job = visibleJobs.find((item) => item.id === selectedId) ?? visibleJobs[0];
   const analysisKey = job ? `${job.id}:${profile.updatedAt}` : "";
   const storedAnalysis = job ? analyses[job.id] : undefined;
@@ -50,12 +64,13 @@ function JobsContent() {
     setAnalyzingId(candidate.id);
     setErrors((current) => ({ ...current, [errorKey]: "" }));
     try {
-      const result = await runJobAnalysis(candidate, profile, force);
+      const result = await runJobAnalysis(candidate, profile, force, setAnalysisStage);
       setAnalyses((current) => ({ ...current, [candidate.id]: result }));
     } catch (error) {
       setErrors((current) => ({ ...current, [errorKey]: error instanceof Error ? error.message : "岗位分析失败" }));
     } finally {
       setAnalyzingId((current) => current === candidate.id ? null : current);
+      setAnalysisStage(null);
     }
   }, [profile]);
 
@@ -67,10 +82,89 @@ function JobsContent() {
     setSaved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
+  async function importJD(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const source = jdText.trim();
+    if (source.length < 30 || jdImporting) return;
+    setJdImporting(true);
+    setJdImportError("");
+    try {
+      setAnalysisStage("jd");
+      const jdResponse = await runAgent<JDAnalysis>("jd", source);
+      setAnalysisStage("match");
+      const matchResponse = await runAgent<MatchReport>("match", { targetJob: jdResponse.data.jobTitle, company: jdResponse.data.company }, { profile, jd: jdResponse.data });
+      const id = `custom-${Date.now()}`;
+      const customJob: Job = {
+        id,
+        company: jdResponse.data.company || "自定义公司",
+        role: jdResponse.data.jobTitle || "自定义岗位",
+        location: "自定义 JD",
+        salary: "未注明",
+        match: matchResponse.data.score,
+        initials: (jdResponse.data.company || jdResponse.data.jobTitle || "岗").slice(0, 1),
+        posted: "刚刚导入",
+        tags: jdResponse.data.keywords,
+        summary: jdResponse.data.summary,
+        responsibilities: jdResponse.data.responsibilities,
+        requirements: [...jdResponse.data.requiredSkills, ...jdResponse.data.preferredSkills],
+        scores: [
+          { label: "技能", value: matchResponse.data.dimensions.skills },
+          { label: "项目", value: matchResponse.data.dimensions.projects },
+          { label: "专业", value: matchResponse.data.dimensions.education },
+          { label: "经历", value: matchResponse.data.dimensions.experience },
+        ],
+        strengths: matchResponse.data.matchedSkills,
+        gaps: matchResponse.data.gaps,
+      };
+      const result: JobAnalysisResult = {
+        jobId: id,
+        jd: jdResponse.data,
+        match: matchResponse.data,
+        meta: { provider: matchResponse.meta.provider, demo: jdResponse.meta.demo || matchResponse.meta.demo },
+        profileUpdatedAt: profile.updatedAt,
+      };
+      setCustomJobs((current) => [customJob, ...current]);
+      setAnalyses((current) => ({ ...current, [id]: result }));
+      setSelectedId(id);
+      setJdDialogOpen(false);
+      setJdText("");
+    } catch (error) {
+      setJdImportError(error instanceof Error ? error.message : "JD 导入失败");
+    } finally {
+      setJdImporting(false);
+      setAnalysisStage(null);
+    }
+  }
+
+  function addToApplications(candidate: Job) {
+    if (applications.some((item) => item.jobId === candidate.id && item.stage !== "closed")) {
+      setAddedJobId(candidate.id);
+      return;
+    }
+    saveApplications([...applications, {
+      id: `application-${Date.now()}`,
+      company: candidate.company,
+      role: candidate.role,
+      jobId: candidate.id,
+      stage: "interested",
+      nextAction: "核对岗位要求并准备定向材料",
+      deadline: "",
+      notes: candidate.id.startsWith("custom-") ? "来自手动粘贴的 JD" : "来自岗位匹配页面",
+      updatedAt: new Date().toISOString(),
+    }]);
+    setAddedJobId(candidate.id);
+  }
+
+  const jobAnalysisSteps: AgentTraceStep[] = [
+    { id: "jd", label: "JD 解析 Agent", description: "提取职责、要求与关键词", source: "岗位原文", status: analysis ? "completed" : analysisStage === "jd" ? "running" : analysisStage === "match" ? "completed" : analysisError ? "error" : "waiting" },
+    { id: "match", label: "岗位匹配 Agent", description: "基于证据计算优势与差距", source: "结构化 JD + Career Profile", status: analysis ? "completed" : analysisStage === "match" ? "running" : analysisError ? "error" : "waiting" },
+  ];
+
   return (
     <AppShell>
-      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="选择岗位后，JD 解析与岗位匹配 Agent 会依据同一份 Career Profile 生成分析。" action={<button className="secondary-button" onClick={() => job && void analyze(job, true)} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : "重新分析当前岗位"}</button>} />
+      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="选择预置岗位，或粘贴你找到的真实 JD；解析与匹配都基于同一份 Career Profile。" action={<div className="jobs-heading-actions"><button className="secondary-button" onClick={() => setJdDialogOpen(true)}><Plus size={15} />粘贴真实 JD</button><button className="secondary-button" onClick={() => job && void analyze(job, true)} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : "重新分析当前岗位"}</button></div>} />
       {analysis ? <p className="page-feedback" role="status"><Sparkles size={13} />已由{analysis.meta.demo ? "演示引擎" : analysis.meta.provider}完成 JD 解析与匹配分析</p> : null}
+      {job && addedJobId === job.id ? <p className="page-feedback" role="status"><Check size={13} />已加入投递中心，可继续记录准备、投递和面试进度</p> : null}
       <section className="jobs-workbench">
         <aside className="job-list-panel">
           <div className="job-search"><Search size={16} /><input aria-label="搜索岗位" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="公司、岗位或技能" /></div>
@@ -106,6 +200,7 @@ function JobsContent() {
 
         <aside className="match-panel">
           <div className="match-head"><p><Sparkles size={15} />AI MATCH REPORT</p><span>基于共享 Career Profile</span></div>
+          {(analyzing || analysis) ? <AgentTrace title="岗位分析协作链" steps={jobAnalysisSteps} /> : null}
           {analyzing && !analysis ? <AnalysisState icon={<RefreshCw size={22} className="spin" />} title="正在分析当前岗位" description="JD 解析完成后会自动进行证据化匹配。" /> : null}
           {analysisError && !analysis ? <AnalysisState icon={<TriangleAlert size={22} />} title="分析暂未完成" description={analysisError} action={() => void analyze(job, true)} /> : null}
           {analysis ? <>
@@ -118,12 +213,21 @@ function JobsContent() {
             ].map((score) => <div key={score.label}><p><span>{score.label}</span><b>{score.value}%</b></p><ProgressLine value={score.value} compact /></div>)}</div>
             <div className="match-insights positive"><h3><Check size={15} />你的优势</h3>{(analysis.match.matchedSkills.length ? analysis.match.matchedSkills : analysis.match.evidence).map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div>
             <div className="match-insights gap"><h3><TriangleAlert size={15} />仍有差距</h3>{analysis.match.gaps.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div>
+            <button className="secondary-button full application-entry-button" onClick={() => addToApplications(job)}><ClipboardCheck size={15} />{addedJobId === job.id ? "已加入投递中心" : "加入投递中心"}</button>
             <Link className="primary-button full" href={`/workspace?job=${job.id}`}>针对该岗位优化简历 <ArrowRight size={16} /></Link>
             <Link className="interview-entry-link" href={`/interview?job=${job.id}`}><Mic2 size={15} />开始岗位模拟面试 <ArrowRight size={14} /></Link>
             <small className="match-note">匹配度用于发现优势与差距，不代表录用概率。</small>
           </> : null}
         </aside></> : <article className="job-detail-empty"><Search size={24} /><h2>换个条件继续找</h2><p>当前筛选下没有岗位，清除关键词或更换城市后即可查看详情与匹配分析。</p><button className="secondary-button" onClick={() => { setQuery(""); setLocation("all"); }}>查看全部岗位</button></article>}
       </section>
+      {jdDialogOpen ? <div className="dialog-backdrop" role="presentation"><form className="jd-import-dialog" role="dialog" aria-modal="true" aria-labelledby="jd-import-title" onSubmit={importJD}>
+        <div className="dialog-title"><div><p className="eyebrow">CUSTOM JOB DESCRIPTION</p><h2 id="jd-import-title">粘贴真实 JD</h2></div><button type="button" onClick={() => setJdDialogOpen(false)} aria-label="关闭 JD 导入"><X size={18} /></button></div>
+        <p>请粘贴公司、岗位职责和任职要求。系统不会自动投递，也不会保存招聘网站账号信息。</p>
+        <label>JD 原文<textarea value={jdText} onChange={(event) => setJdText(event.target.value)} placeholder="例如：公司名称、岗位名称、岗位职责、任职要求……" minLength={30} required /></label>
+        <small>{jdText.length} 字 · 建议保留完整职责与要求</small>
+        {jdImportError ? <div className="application-error"><TriangleAlert size={14} />{jdImportError}</div> : null}
+        <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setJdDialogOpen(false)}>取消</button><button type="submit" className="primary-button" disabled={jdText.trim().length < 30 || jdImporting}>{jdImporting ? <><RefreshCw size={14} className="spin" />JD 与匹配 Agent 正在协作…</> : <><Sparkles size={14} />解析并匹配</>}</button></div>
+      </form></div> : null}
     </AppShell>
   );
 }

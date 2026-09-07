@@ -10,7 +10,7 @@
 - `/applications`：投递流水线、下一步管理与 Offer 比较
 - `/settings`：DeepSeek / 通义千问接口配置与连接测试
 
-当前岗位来源仍使用 Mock Data，不会抓取真实招聘网站；十个独立 Agent 已接入任务型 UI，可通过服务端调用真实大模型：
+内置岗位列表仍使用 Mock Data，不会抓取招聘网站；用户可以粘贴任意真实 JD 并完成解析、匹配和加入投递中心。十个独立 Agent 已接入任务型 UI，可通过服务端调用真实大模型：
 
 1. **简历构建 Agent**：把基础信息、技能和零散经历整理为基础简历与结构化档案。
 2. **JD 解析 Agent**：提取岗位职责、硬性要求、加分项与关键词。
@@ -23,7 +23,7 @@
 9. **投递管理 Agent**：读取本地投递流水线，整理优先行动、跟进事项和记录风险。
 10. **Offer 决策 Agent**：只根据用户填写的已确认条款比较 Offer，并列出需要继续核实的问题。
 
-当前版本不依赖任何付费第三方智能体平台。没有配置模型密钥时，会自动使用内置演示引擎，因此克隆后即可跑通全部流程。
+当前版本不依赖任何付费第三方智能体平台。没有配置模型密钥时，会自动使用内置演示引擎，因此克隆后即可跑通全部流程。账号与云同步为可选增强项：不配置 Supabase 时继续使用浏览器本地存储，不影响十个 Agent。
 
 ## 技术栈
 
@@ -32,7 +32,10 @@
 - Next.js Route Handlers
 - Zod 运行时数据校验
 - DeepSeek / 通义千问 OpenAI 兼容接口
-- 浏览器 `localStorage` 保存 Career Profile
+- PDF / DOCX / TXT / Markdown 简历文本提取
+- 浏览器 `localStorage` 本地持久化
+- 可选 Supabase Auth + PostgreSQL 云端同步（RLS 用户隔离）
+- Vitest Agent 合约测试 + Playwright 主流程测试
 
 ## 本地启动
 
@@ -81,6 +84,17 @@ QWEN_BASE_URL=https://你的WorkspaceId.cn-beijing.maas.aliyuncs.com/compatible-
 
 演示引擎用于验证产品流程，并不等价于真实模型的语义分析质量。
 
+## 可选账号与云同步
+
+不填写 Supabase 环境变量时，设置页会显示“未启用”，项目保持纯本地模式。需要跨设备同步时，在 `.env.local` 填写：
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=你的项目地址
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的公开密钥
+```
+
+然后执行 `supabase/migrations/202609070001_initial_workspace.sql`。登录与同步入口位于 `/settings#cloud-sync`；同步内容包括 Career Profile、投递、职业报告、面试记录和 Offer 对比记录，不包括 DeepSeek/Qwen API 密钥。完整步骤见 `DEPLOYMENT.md`。
+
 ## 数据结构
 
 统一档案定义在 `src/lib/schemas.ts`：
@@ -103,7 +117,7 @@ type CareerProfile = {
 };
 ```
 
-十个 Agent 的输出都经过 Zod 校验。简历 Agent 写入档案；其余 Agent 读取同一 Career Profile 以及上游结构化结果。优化 Agent 只允许基于档案证据改写，并由服务端保留身份、学校、技能和项目元数据。
+十个 Agent 的输出都经过 Zod 校验和统一事实守卫。简历 Agent 写入档案；其余 Agent 读取同一 Career Profile 以及上游结构化结果。优化 Agent 只允许基于档案证据改写，并由服务端保留身份、学校、技能和项目元数据。
 
 实际页面链路为：
 
@@ -149,9 +163,11 @@ type CareerProfile = {
 ```bash
 pnpm typecheck
 pnpm lint
+pnpm test
 pnpm build
+pnpm test:e2e
 ```
 
 ## MVP 边界与下一步
 
-当前档案和投递记录保存在当前浏览器，不支持账号、多设备同步、多人协作或服务端历史记录。岗位列表仍是演示数据，AI 工作区的自由对话仍是演示交互；系统不会自动投递、发送邮件或联系招聘方。正式版本建议下一步接入 PostgreSQL / Supabase，并增加真实岗位源、用户登录、简历 PDF 导出以及自动化端到端测试。
+未配置 Supabase 时，数据只保存在当前浏览器；配置后支持账号与单用户工作区跨设备同步。当前同步采用每用户一份 JSONB 快照，适合 MVP，不提供多人实时协作或逐条历史版本。岗位列表仍是演示数据，真实岗位需由用户粘贴 JD；AI 工作区的自由对话仍是引导式交互；系统不会自动投递、发送邮件或联系招聘方。后续可继续增加合规岗位源、简历 PDF 导出、文件对象存储和团队协作。

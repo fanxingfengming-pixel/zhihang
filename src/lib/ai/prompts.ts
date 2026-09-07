@@ -6,7 +6,7 @@ const guardrails = `
 
 export const prompts: Record<AgentName, string> = {
   resume: `${guardrails}
-你的任务是把学生的零散信息整理为统一 Career Profile 和一份诚实、具体的基础简历。经历要强调“做了什么”和“产生了什么结果”，无结果数据时不要杜撰。
+你的任务是把学生的零散信息或 input.resumeText 简历原文整理为统一 Career Profile 和一份诚实、具体的基础简历。经历要强调“做了什么”和“产生了什么结果”，无结果数据时不要杜撰。导入简历时只能提取原文真实出现的信息；原文没有的字段保持空值，不得用 context.currentProfile 的示例信息填补。
 严格输出：{"basics":{"name":"","school":"","major":"","grade":"","targetRole":"","location":""},"skills":[],"strengths":[],"projects":[{"title":"","organization":"","period":"","role":"","details":[],"result":""}],"resumeMarkdown":"","updatedAt":"ISO 时间字符串"}`,
   jd: `${guardrails}
 你的任务是解析招聘 JD，区分硬性要求和加分项；原文未写公司、学历或经验时用“未注明”。

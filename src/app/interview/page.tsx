@@ -19,7 +19,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { useCareerProfile } from "@/hooks/use-career-profile";
+import { useInterviewHistory } from "@/hooks/use-insight-history";
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
+import { saveInterviewHistory } from "@/lib/insight-history-store";
 import { runJobAnalysis, type JobAnalysisResult } from "@/lib/job-analysis";
 import type { InterviewAgentResult, InterviewEvaluation, InterviewPreparation } from "@/lib/schemas";
 import { jobs } from "@/lib/ui-data";
@@ -37,6 +39,7 @@ function InterviewContent() {
   const params = useSearchParams();
   const router = useRouter();
   const profile = useCareerProfile();
+  const interviewHistory = useInterviewHistory();
   const initialId = params.get("job");
   const [selectedId, setSelectedId] = useState(jobs.some((job) => job.id === initialId) ? initialId! : jobs[0].id);
   const selectedJob = jobs.find((job) => job.id === selectedId) ?? jobs[0];
@@ -110,6 +113,16 @@ function InterviewContent() {
       }, { profile, jd: analysis.jd, match: analysis.match });
       if (response.data.action !== "evaluate") throw new Error("面试 Agent 返回了错误的任务类型");
       setEvaluation(response.data);
+      saveInterviewHistory([{
+        id: `practice-${Date.now()}`,
+        jobId: selectedJob.id,
+        jobTitle: analysis.jd.jobTitle,
+        question: currentQuestion.question,
+        answer: cleanAnswer,
+        evaluation: response.data,
+        meta: response.meta,
+        createdAt: new Date().toISOString(),
+      }, ...interviewHistory]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "回答评分失败");
     } finally {
@@ -164,6 +177,7 @@ function InterviewContent() {
             <strong>{profile.skills.length + profile.projects.length}<small> 项</small></strong>
             <p>{profile.basics.targetRole || "尚未设置目标岗位"}</p>
           </div>
+          <div className="interview-history-mini"><span>最近训练</span>{interviewHistory.slice(0, 3).map((record) => <p key={record.id}><b>{Math.round(record.evaluation.evaluation.score)}</b><small>{record.jobTitle}</small></p>)}{interviewHistory.length === 0 ? <em>提交回答后自动保存在当前浏览器</em> : null}</div>
           <Link className="interview-back-link" href={`/jobs?job=${selectedJob.id}`}><ArrowLeft size={14} />返回岗位详情</Link>
         </aside>
 

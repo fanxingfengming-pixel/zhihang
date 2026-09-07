@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Check, ChevronDown, FileText, MessageCircleMore, Pencil, RefreshCw, Send, Sparkles, WandSparkles } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, FileText, MessageCircleMore, Pencil, RefreshCw, Send, Sparkles, Upload, WandSparkles } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppShell } from "@/components/ui/app-shell";
 import { ResumeChatBuilder } from "@/components/resume-chat-builder";
+import { ResumeImportDialog } from "@/components/resume-import-dialog";
 import { useCareerProfile } from "@/hooks/use-career-profile";
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
 import { careerProfileToResumeDraft, saveCareerProfile } from "@/lib/career-profile-store";
@@ -42,6 +43,7 @@ function WorkspaceContent() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState(["我已结合目标 JD 完成首轮分析，建议先处理项目经历。"]);
   const [builderOpen, setBuilderOpen] = useState(params.get("mode") === "build");
+  const [importOpen, setImportOpen] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [activeSection, setActiveSection] = useState("project");
   const [analyses, setAnalyses] = useState<Record<string, JobAnalysisResult>>({});
@@ -152,6 +154,7 @@ function WorkspaceContent() {
           <div className="match-up"><span>当前匹配度</span><strong>{matchScore === undefined ? "—" : matchScore}{matchScore === undefined ? null : <small>%</small>}</strong></div>
           <div className="keyword-block"><p>JD 关键词 <span>{jdKeywords.length}</span></p>{jdKeywords.slice(0, 8).map((tag, index) => <span key={`${tag}-${index}`} className={index > 3 ? "weak" : ""}>{tag}</span>)}</div>
           <button className="builder-launch" onClick={() => setBuilderOpen(true)}><Sparkles size={15} /><span><b>对话生成简历</b><small>回答 6 个问题即可</small></span></button>
+          <button className="builder-launch resume-import-launch" onClick={() => setImportOpen(true)}><Upload size={15} /><span><b>导入已有简历</b><small>支持 PDF / DOCX / TXT</small></span></button>
           <nav className="resume-outline"><p className="panel-label">RESUME OUTLINE</p><button className={activeSection === "profile" ? "active" : ""} onClick={() => scrollToSection("profile")}><span>01</span>个人信息<Check size={13} /></button><button className={activeSection === "education" ? "active" : ""} onClick={() => scrollToSection("education")}><span>02</span>教育经历<Check size={13} /></button><button className={activeSection === "project" ? "active" : ""} onClick={() => scrollToSection("project")}><span>03</span>项目经历<i>2</i></button><button className={activeSection === "skills" ? "active" : ""} onClick={() => scrollToSection("skills")}><span>04</span>技能清单<i>1</i></button></nav>
         </aside>
 
@@ -184,6 +187,7 @@ function WorkspaceContent() {
         </aside>
       </section>
       {builderOpen ? <ResumeChatBuilder onClose={() => setBuilderOpen(false)} onApply={applyGeneratedResume} /> : null}
+      {importOpen ? <ResumeImportDialog onClose={() => setImportOpen(false)} onApply={(profile) => { applyGeneratedResume(careerProfileToResumeDraft(profile), profile); setImportOpen(false); }} /> : null}
     </AppShell>
   );
 }

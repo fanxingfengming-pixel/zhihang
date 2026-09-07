@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // This workspace's project-level AGENTS.md is synced read-only.
   // Prevent Next.js 16.3+ from trying to inject its own managed block in dev.
   agentRules: false,
+  serverExternalPackages: ["pdf-parse", "mammoth"],
 };
 
 export default nextConfig;

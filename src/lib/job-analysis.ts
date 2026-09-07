@@ -10,6 +10,8 @@ export type JobAnalysisResult = {
   profileUpdatedAt: string;
 };
 
+export type JobAnalysisStage = "jd" | "match";
+
 export const JOB_ANALYSIS_EVENT = "zhihang-job-analysis-change";
 
 export function subscribeJobAnalysis(onStoreChange: () => void) {
@@ -57,13 +59,15 @@ export function getCachedJobScoresSnapshot(jobIds: string[], profileUpdatedAt: s
   return JSON.stringify(scores);
 }
 
-export async function runJobAnalysis(job: Job, profile: CareerProfile, force = false): Promise<JobAnalysisResult> {
+export async function runJobAnalysis(job: Job, profile: CareerProfile, force = false, onStage?: (stage: JobAnalysisStage) => void): Promise<JobAnalysisResult> {
   if (!force) {
     const cached = getCachedJobAnalysis(job.id, profile.updatedAt);
     if (cached) return cached;
   }
 
+  onStage?.("jd");
   const jdResponse = await runAgent<JDAnalysis>("jd", jobToJDText(job));
+  onStage?.("match");
   const matchResponse = await runAgent<MatchReport>(
     "match",
     { targetJob: jdResponse.data.jobTitle, company: jdResponse.data.company },

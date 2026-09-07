@@ -4,17 +4,13 @@ import { ArrowRight, BarChart3, BrainCircuit, BriefcaseBusiness, Check, FileText
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
+import { AgentTrace, type AgentTraceStep } from "@/components/ui/agent-trace";
 import { saveCareerProfile } from "@/lib/career-profile-store";
 import { useCareerProfile } from "@/hooks/use-career-profile";
-import { runAgent, type AgentMeta } from "@/lib/agent-client";
+import { useCareerIntelligenceHistory } from "@/hooks/use-insight-history";
+import { runAgent } from "@/lib/agent-client";
+import { saveCareerIntelligence } from "@/lib/insight-history-store";
 import type { CareerPositioning, GrowthPlan, SkillGapAnalysis } from "@/lib/schemas";
-
-type CareerIntelligence = {
-  positioning: CareerPositioning;
-  gap: SkillGapAnalysis;
-  plan: GrowthPlan;
-  meta: AgentMeta;
-};
 
 const journey = [
   { number: "01", title: "职业画像", note: "方向已确认", detail: "结合专业、兴趣与项目经历，生成你的求职能力画像。", status: "已完成", icon: Fingerprint, href: "/career" },
@@ -36,8 +32,10 @@ export default function CareerCenterPage() {
     stage: "2027 暑期实习",
   };
   const [targetDraft, setTargetDraft] = useState(target);
-  const [intelligence, setIntelligence] = useState<CareerIntelligence | null>(null);
+  const storedIntelligence = useCareerIntelligenceHistory();
+  const intelligence = storedIntelligence?.profileUpdatedAt === profile.updatedAt ? storedIntelligence : null;
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+  const [intelligenceStage, setIntelligenceStage] = useState<"career" | "gap" | "plan" | null>(null);
   const [intelligenceError, setIntelligenceError] = useState("");
 
   function openTargetEditor() {
@@ -62,16 +60,33 @@ export default function CareerCenterPage() {
     setIntelligenceLoading(true);
     setIntelligenceError("");
     try {
+      setIntelligenceStage("career");
       const positioning = await runAgent<CareerPositioning>("career", { profile });
+      setIntelligenceStage("gap");
       const gap = await runAgent<SkillGapAnalysis>("gap", { profile }, { career: positioning.data });
+      setIntelligenceStage("plan");
       const plan = await runAgent<GrowthPlan>("plan", { profile }, { career: positioning.data, gap: gap.data });
-      setIntelligence({ positioning: positioning.data, gap: gap.data, plan: plan.data, meta: plan.meta });
+      saveCareerIntelligence({
+        profileUpdatedAt: profile.updatedAt,
+        generatedAt: new Date().toISOString(),
+        positioning: positioning.data,
+        gap: gap.data,
+        plan: plan.data,
+        meta: plan.meta,
+      });
     } catch (error) {
       setIntelligenceError(error instanceof Error ? error.message : "职业智能报告生成失败");
     } finally {
       setIntelligenceLoading(false);
+      setIntelligenceStage(null);
     }
   }
+
+  const intelligenceSteps: AgentTraceStep[] = [
+    { id: "career", label: "职业定位 Agent", description: "提出岗位方向与验证实验", source: "Career Profile", status: intelligence ? "completed" : intelligenceStage === "career" ? "running" : intelligenceStage ? "completed" : "waiting" },
+    { id: "gap", label: "能力诊断 Agent", description: "区分证据、优势和关键差距", source: "Career Profile + 定位结果", status: intelligence ? "completed" : intelligenceStage === "gap" ? "running" : intelligenceStage === "plan" ? "completed" : "waiting" },
+    { id: "plan", label: "提升计划 Agent", description: "生成任务、交付物与验收标准", source: "能力差距 + 优先级", status: intelligence ? "completed" : intelligenceStage === "plan" ? "running" : "waiting" },
+  ];
 
   return (
     <AppShell>
@@ -103,6 +118,7 @@ export default function CareerCenterPage() {
           </button>
         </div>
         {intelligenceError ? <div className="career-intelligence-error" role="alert"><TriangleAlert size={15} />{intelligenceError}</div> : null}
+        {(intelligenceLoading || intelligence) ? <AgentTrace title="职业决策协作链" steps={intelligenceSteps} /> : null}
         {!intelligence ? (
           <div className="career-intelligence-empty">
             {[{ icon: Target, title: "职业定位", text: "从档案证据提出相邻岗位假设" }, { icon: BrainCircuit, title: "能力诊断", text: "区分已有证据和关键差距" }, { icon: Route, title: "提升计划", text: "把差距拆成四周真实交付物" }].map(({ icon: Icon, title, text }, index) => <div key={title}><span><Icon size={17} /></span><p><small>AGENT 0{index + 6}</small><b>{title}</b><em>{text}</em></p></div>)}

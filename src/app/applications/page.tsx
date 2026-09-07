@@ -19,8 +19,10 @@ import { useState, type FormEvent } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { useApplications } from "@/hooks/use-applications";
 import { useCareerProfile } from "@/hooks/use-career-profile";
+import { useOfferHistory } from "@/hooks/use-insight-history";
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
 import { saveApplications } from "@/lib/application-store";
+import { saveOfferHistory } from "@/lib/insight-history-store";
 import type { ApplicationManagement, ApplicationRecord, ApplicationStage, OfferCandidate, OfferDecision } from "@/lib/schemas";
 
 const stages: Array<{ id: Exclude<ApplicationStage, "closed">; label: string }> = [
@@ -55,6 +57,7 @@ type ApplicationDraft = {
 export default function ApplicationsPage() {
   const applications = useApplications();
   const profile = useCareerProfile();
+  const offerHistory = useOfferHistory();
   const activeApplications = applications.filter((item) => item.stage !== "closed");
   const [managerReport, setManagerReport] = useState<{ data: ApplicationManagement; meta: AgentMeta } | null>(null);
   const [managerLoading, setManagerLoading] = useState(false);
@@ -140,6 +143,13 @@ export default function ApplicationsPage() {
     try {
       const response = await runAgent<OfferDecision>("offer", { offers: comparable }, { profile });
       setOfferReport(response);
+      saveOfferHistory([{
+        id: `comparison-${Date.now()}`,
+        offers: comparable,
+        decision: response.data,
+        meta: response.meta,
+        createdAt: new Date().toISOString(),
+      }, ...offerHistory]);
     } catch (error) {
       setOfferError(error instanceof Error ? error.message : "Offer 比较失败");
     } finally {
@@ -207,6 +217,7 @@ export default function ApplicationsPage() {
               <section><h3>需要核实</h3>{offerReport.data.questionsToVerify.slice(0, 3).map((item) => <p key={item}><TriangleAlert size={11} />{item}</p>)}</section>
               <section><h3>可沟通事项</h3>{offerReport.data.negotiationPoints.slice(0, 3).map((item) => <p key={item}><Check size={11} />{item}</p>)}</section>
               <small className="offer-disclaimer">{offerReport.data.disclaimer}</small>
+              <div className="offer-history-mini"><h3>最近比较</h3>{offerHistory.slice(0, 3).map((record) => <p key={record.id}><span>{new Date(record.createdAt).toLocaleDateString("zh-CN")}</span><b>{record.offers.map((offer) => offer.company).join(" vs ")}</b></p>)}</div>
             </> : <div className="offer-report-empty"><BriefcaseBusiness size={24} /><h3>先把未知变成问题</h3><p>没有填写的信息不会被当作优势。Agent 会同时给出排名、权衡点和签约前需要核实的问题。</p></div>}
           </aside>
         </div>

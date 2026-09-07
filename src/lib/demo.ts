@@ -10,6 +10,24 @@ export function demoResult(agent: AgentName, input: unknown, context: unknown) {
   const data = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 
   if (agent === "resume") {
+    const resumeText = String(data.resumeText || "").trim();
+    if (resumeText) {
+      const lines = resumeText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const knownSkills = ["Figma", "Python", "SQL", "Excel", "数据分析", "用户研究", "产品设计", "AI Agent", "大模型", "PPT"];
+      const skills = knownSkills.filter((skill) => resumeText.toLowerCase().includes(skill.toLowerCase()));
+      const nameCandidate = lines.find((line) => /^[\u4e00-\u9fa5·]{2,8}$/.test(line)) || "";
+      const targetRole = resumeText.match(/(?:求职意向|目标岗位|求职方向)[：:]?\s*([^\n]+)/)?.[1]?.trim() || "";
+      const school = lines.find((line) => /大学|学院/.test(line)) || "";
+      const projectLine = lines.find((line) => /项目|作品|竞赛/.test(line)) || "";
+      return {
+        basics: { name: nameCandidate, school, major: "", grade: "", targetRole, location: "" },
+        skills,
+        strengths: skills.slice(0, 3).map((skill) => `${skill} 相关经历待人工核对`),
+        projects: projectLine ? [{ title: projectLine.slice(0, 60), organization: "", period: "", role: "", details: [], result: "" }] : [],
+        resumeMarkdown: resumeText,
+        updatedAt: new Date().toISOString(),
+      };
+    }
     const skills = splitItems(data.skills);
     const experience = String(data.experience || "").trim();
     const projectName = String(data.projectName || "代表性实践经历");

@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCareerProfile } from "@/hooks/use-career-profile";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
@@ -32,6 +33,7 @@ const navItems = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const profile = useCareerProfile();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -86,8 +88,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p><b>一步一步，靠近理想 Offer。</b><span>每一次完善都会留下成长的刻度。</span></p>
         </div>
         <div className="sidebar-user">
-          <span className="avatar">李</span>
-          <p><b>李同学</b><small>浙江大学 · 大三</small></p>
+          <span className="avatar">{profile.basics.name.trim().slice(0, 1) || "职"}</span>
+          <p><b>{profile.basics.name || "职航同学"}</b><small>{[profile.basics.school, profile.basics.grade].filter(Boolean).join(" · ") || "求职档案待完善"}</small></p>
           <Link href="/settings" aria-label="打开设置"><Settings size={16} /></Link>
         </div>
       </aside>
