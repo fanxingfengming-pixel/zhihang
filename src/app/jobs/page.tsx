@@ -3,14 +3,17 @@
 import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { AgentTrace, type AgentTraceStep } from "@/components/ui/agent-trace";
 import { useCareerProfile } from "@/hooks/use-career-profile";
 import { useApplications } from "@/hooks/use-applications";
+import { useCustomJobs } from "@/hooks/use-custom-jobs";
+import { useJobAnalysis, useJobAnalysisScores } from "@/hooks/use-job-analysis";
 import { runAgent } from "@/lib/agent-client";
 import { saveApplications } from "@/lib/application-store";
-import { runJobAnalysis, type JobAnalysisResult, type JobAnalysisStage } from "@/lib/job-analysis";
+import { saveCustomJob } from "@/lib/custom-job-store";
+import { runJobAnalysis, saveCachedJobAnalysis, type JobAnalysisResult, type JobAnalysisStage } from "@/lib/job-analysis";
 import type { JDAnalysis, MatchReport } from "@/lib/schemas";
 import { jobs, type Job } from "@/lib/ui-data";
 
@@ -18,28 +21,43 @@ export default function JobsPage() {
   return <Suspense fallback={<div className="route-loading">正在整理岗位匹配结果…</div>}><JobsContent /></Suspense>;
 }
 
+function jobRecency(job: Job) {
+  if (job.createdAt) return Date.parse(job.createdAt) || 0;
+  if (/今天|刚刚/.test(job.posted)) return 1;
+  const daysAgo = Number(job.posted.match(/(\d+)\s*天前/)?.[1]);
+  return Number.isFinite(daysAgo) ? -daysAgo : Number.NEGATIVE_INFINITY;
+}
+
 function JobsContent() {
   const params = useSearchParams();
   const initialId = params.get("job");
-  const [selectedId, setSelectedId] = useState(jobs.some((job) => job.id === initialId) ? initialId! : jobs[0].id);
+  const [selectedId, setSelectedId] = useState(initialId || jobs[0].id);
   const [saved, setSaved] = useState<string[]>([]);
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [location, setLocation] = useState("all");
   const [sort, setSort] = useState("match");
   const profile = useCareerProfile();
   const applications = useApplications();
-  const [customJobs, setCustomJobs] = useState<Job[]>([]);
+  const customJobs = useCustomJobs();
   const [jdDialogOpen, setJdDialogOpen] = useState(false);
   const [jdText, setJdText] = useState("");
   const [jdImporting, setJdImporting] = useState(false);
   const [jdImportError, setJdImportError] = useState("");
   const [addedJobId, setAddedJobId] = useState("");
-  const [analyses, setAnalyses] = useState<Record<string, JobAnalysisResult>>({});
   const [analysisStage, setAnalysisStage] = useState<JobAnalysisStage | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [transientAnalyses, setTransientAnalyses] = useState<Record<string, JobAnalysisResult>>({});
 
   const allJobs = useMemo(() => [...customJobs, ...jobs], [customJobs]);
+  const cachedAnalysisScores = useJobAnalysisScores(allJobs.map((item) => item.id), profile.updatedAt);
+  const analysisScores = useMemo(() => {
+    const scores = { ...cachedAnalysisScores };
+    for (const result of Object.values(transientAnalyses)) {
+      if (result.profileUpdatedAt === profile.updatedAt) scores[result.jobId] = result.match.score;
+    }
+    return scores;
+  }, [cachedAnalysisScores, profile.updatedAt, transientAnalyses]);
   const visibleJobs = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const filtered = allJobs.filter((item) => {
@@ -47,15 +65,16 @@ function JobsContent() {
       const matchesLocation = location === "all" || (location === "hzsh" && /杭州|上海/.test(item.location)) || (location === "sz" && item.location.includes("深圳"));
       return matchesQuery && matchesLocation;
     });
-    const currentScore = (jobId: string) => analyses[jobId]?.profileUpdatedAt === profile.updatedAt ? analyses[jobId].match.score : -1;
+    const currentScore = (jobId: string) => analysisScores[jobId] ?? -1;
     return sort === "match"
       ? filtered.toSorted((a, b) => currentScore(b.id) - currentScore(a.id))
-      : filtered.toSorted((a, b) => a.posted.localeCompare(b.posted));
-  }, [allJobs, analyses, location, profile.updatedAt, query, sort]);
+      : filtered.toSorted((a, b) => jobRecency(b) - jobRecency(a));
+  }, [allJobs, analysisScores, location, query, sort]);
   const job = visibleJobs.find((item) => item.id === selectedId) ?? visibleJobs[0];
   const analysisKey = job ? `${job.id}:${profile.updatedAt}` : "";
-  const storedAnalysis = job ? analyses[job.id] : undefined;
-  const analysis = storedAnalysis?.profileUpdatedAt === profile.updatedAt ? storedAnalysis : undefined;
+  const cachedAnalysis = useJobAnalysis(job?.id || "", profile.updatedAt);
+  const transientAnalysis = job ? transientAnalyses[`${job.id}:${profile.updatedAt}`] : undefined;
+  const analysis = transientAnalysis || cachedAnalysis;
   const analysisError = errors[analysisKey];
   const analyzing = Boolean(job && analyzingId === job.id);
 
@@ -65,7 +84,7 @@ function JobsContent() {
     setErrors((current) => ({ ...current, [errorKey]: "" }));
     try {
       const result = await runJobAnalysis(candidate, profile, force, setAnalysisStage);
-      setAnalyses((current) => ({ ...current, [candidate.id]: result }));
+      setTransientAnalyses((current) => ({ ...current, [errorKey]: result }));
     } catch (error) {
       setErrors((current) => ({ ...current, [errorKey]: error instanceof Error ? error.message : "岗位分析失败" }));
     } finally {
@@ -73,10 +92,6 @@ function JobsContent() {
       setAnalysisStage(null);
     }
   }, [profile]);
-
-  useEffect(() => {
-    if (job && !analysis && analyzingId !== job.id && !analysisError) void analyze(job);
-  }, [analysis, analysisError, analyze, analyzingId, job]);
 
   function toggleSaved(id: string) {
     setSaved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
@@ -93,7 +108,8 @@ function JobsContent() {
       const jdResponse = await runAgent<JDAnalysis>("jd", source);
       setAnalysisStage("match");
       const matchResponse = await runAgent<MatchReport>("match", { targetJob: jdResponse.data.jobTitle, company: jdResponse.data.company }, { profile, jd: jdResponse.data });
-      const id = `custom-${Date.now()}`;
+      const createdAt = new Date().toISOString();
+      const id = `custom-${crypto.randomUUID()}`;
       const customJob: Job = {
         id,
         company: jdResponse.data.company || "自定义公司",
@@ -103,6 +119,8 @@ function JobsContent() {
         match: matchResponse.data.score,
         initials: (jdResponse.data.company || jdResponse.data.jobTitle || "岗").slice(0, 1),
         posted: "刚刚导入",
+        createdAt,
+        sourceText: source,
         tags: jdResponse.data.keywords,
         summary: jdResponse.data.summary,
         responsibilities: jdResponse.data.responsibilities,
@@ -123,9 +141,12 @@ function JobsContent() {
         meta: { provider: matchResponse.meta.provider, demo: jdResponse.meta.demo || matchResponse.meta.demo },
         profileUpdatedAt: profile.updatedAt,
       };
-      setCustomJobs((current) => [customJob, ...current]);
-      setAnalyses((current) => ({ ...current, [id]: result }));
+      if (!saveCustomJob(customJob)) throw new Error("浏览器无法保存这份 JD，请检查存储权限后重试。");
+      saveCachedJobAnalysis(result);
+      setTransientAnalyses((current) => ({ ...current, [`${id}:${profile.updatedAt}`]: result }));
       setSelectedId(id);
+      setQuery("");
+      setLocation("all");
       setJdDialogOpen(false);
       setJdText("");
     } catch (error) {
@@ -141,7 +162,7 @@ function JobsContent() {
       setAddedJobId(candidate.id);
       return;
     }
-    saveApplications([...applications, {
+    const savedSuccessfully = saveApplications([...applications, {
       id: `application-${Date.now()}`,
       company: candidate.company,
       role: candidate.role,
@@ -152,6 +173,7 @@ function JobsContent() {
       notes: candidate.id.startsWith("custom-") ? "来自手动粘贴的 JD" : "来自岗位匹配页面",
       updatedAt: new Date().toISOString(),
     }]);
+    if (!savedSuccessfully) return;
     setAddedJobId(candidate.id);
   }
 
@@ -162,7 +184,7 @@ function JobsContent() {
 
   return (
     <AppShell>
-      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="选择预置岗位，或粘贴你找到的真实 JD；解析与匹配都基于同一份 Career Profile。" action={<div className="jobs-heading-actions"><button className="secondary-button" onClick={() => setJdDialogOpen(true)}><Plus size={15} />粘贴真实 JD</button><button className="secondary-button" onClick={() => job && void analyze(job, true)} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : "重新分析当前岗位"}</button></div>} />
+      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="选择预置岗位，或粘贴你找到的真实 JD；只有点击分析后才会调用模型。" action={<div className="jobs-heading-actions"><button className="secondary-button" onClick={() => setJdDialogOpen(true)}><Plus size={15} />粘贴真实 JD</button><button className="secondary-button" onClick={() => job && void analyze(job, Boolean(analysis))} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : analysis ? "重新分析当前岗位" : "分析当前岗位"}</button></div>} />
       {analysis ? <p className="page-feedback" role="status"><Sparkles size={13} />已由{analysis.meta.demo ? "演示引擎" : analysis.meta.provider}完成 JD 解析与匹配分析</p> : null}
       {job && addedJobId === job.id ? <p className="page-feedback" role="status"><Check size={13} />已加入投递中心，可继续记录准备、投递和面试进度</p> : null}
       <section className="jobs-workbench">
@@ -175,8 +197,7 @@ function JobsContent() {
           <p className="list-count"><span>推荐岗位</span><b>{visibleJobs.length} RESULTS</b></p>
           <div className="job-list">
             {visibleJobs.map((item) => {
-              const itemAnalysis = analyses[item.id];
-              const score = itemAnalysis?.profileUpdatedAt === profile.updatedAt ? itemAnalysis.match.score : undefined;
+              const score = analysisScores[item.id];
               return <button key={item.id} className={job?.id === item.id ? "selected" : ""} onClick={() => setSelectedId(item.id)}>
                 <span className="company-mark">{item.initials}</span>
                 <div><h3>{item.company}</h3><p>{item.role}</p><small><MapPin size={12} />{item.location}</small></div>
@@ -203,6 +224,7 @@ function JobsContent() {
           {(analyzing || analysis) ? <AgentTrace title="岗位分析协作链" steps={jobAnalysisSteps} /> : null}
           {analyzing && !analysis ? <AnalysisState icon={<RefreshCw size={22} className="spin" />} title="正在分析当前岗位" description="JD 解析完成后会自动进行证据化匹配。" /> : null}
           {analysisError && !analysis ? <AnalysisState icon={<TriangleAlert size={22} />} title="分析暂未完成" description={analysisError} action={() => void analyze(job, true)} /> : null}
+          {!analyzing && !analysis && !analysisError ? <AnalysisState icon={<Sparkles size={22} />} title="等待开始分析" description="点击后将调用 JD 解析与岗位匹配 Agent；进入页面本身不会产生模型费用。" action={() => void analyze(job)} /> : null}
           {analysis ? <>
             <div className="match-score"><strong>{analysis.match.score}<small>%</small></strong><div><h2>综合匹配度</h2><p>{analysis.match.verdict}</p></div></div>
             <div className="score-list">{[

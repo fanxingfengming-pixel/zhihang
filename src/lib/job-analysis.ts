@@ -1,6 +1,7 @@
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
 import { JDAnalysisSchema, MatchReportSchema, type CareerProfile, type JDAnalysis, type MatchReport } from "@/lib/schemas";
 import type { Job } from "@/lib/ui-data";
+import { readSessionStorageItem, writeSessionStorageItem } from "@/lib/browser-storage";
 
 export type JobAnalysisResult = {
   jobId: string;
@@ -20,10 +21,11 @@ export function subscribeJobAnalysis(onStoreChange: () => void) {
 }
 
 function cacheKey(jobId: string, profileUpdatedAt: string) {
-  return `zhihang-job-analysis:${jobId}:${profileUpdatedAt}`;
+  return `zhihang-job-analysis:v1:${jobId}:${profileUpdatedAt}`;
 }
 
 export function jobToJDText(job: Job) {
+  if (job.sourceText?.trim()) return job.sourceText.trim();
   return [
     `公司：${job.company}`,
     `岗位：${job.role}`,
@@ -35,17 +37,34 @@ export function jobToJDText(job: Job) {
   ].join("\n\n");
 }
 
-export function getCachedJobAnalysis(jobId: string, profileUpdatedAt: string) {
-  if (typeof window === "undefined") return null;
-  const saved = window.sessionStorage.getItem(cacheKey(jobId, profileUpdatedAt));
-  if (!saved) return null;
+export function saveCachedJobAnalysis(result: JobAnalysisResult) {
+  if (typeof window === "undefined") return false;
   try {
-    const parsed = JSON.parse(saved) as JobAnalysisResult;
+    if (!writeSessionStorageItem(cacheKey(result.jobId, result.profileUpdatedAt), JSON.stringify(result))) return false;
+    window.dispatchEvent(new Event(JOB_ANALYSIS_EVENT));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function getCachedJobAnalysis(jobId: string, profileUpdatedAt: string) {
+  return parseCachedJobAnalysis(getCachedJobAnalysisSnapshot(jobId, profileUpdatedAt), jobId, profileUpdatedAt);
+}
+
+export function getCachedJobAnalysisSnapshot(jobId: string, profileUpdatedAt: string) {
+  if (!jobId || typeof window === "undefined") return null;
+  return readSessionStorageItem(cacheKey(jobId, profileUpdatedAt));
+}
+
+export function parseCachedJobAnalysis(snapshot: string | null, jobId: string, profileUpdatedAt: string) {
+  if (!snapshot) return null;
+  try {
+    const parsed = JSON.parse(snapshot) as JobAnalysisResult;
     if (parsed.jobId === jobId && parsed.profileUpdatedAt === profileUpdatedAt && JDAnalysisSchema.safeParse(parsed.jd).success && MatchReportSchema.safeParse(parsed.match).success) return parsed;
   } catch {
-    // Invalid or outdated analysis caches are safely discarded below.
+    return null;
   }
-  window.sessionStorage.removeItem(cacheKey(jobId, profileUpdatedAt));
   return null;
 }
 
@@ -83,7 +102,6 @@ export async function runJobAnalysis(job: Job, profile: CareerProfile, force = f
     },
     profileUpdatedAt: profile.updatedAt,
   };
-  window.sessionStorage.setItem(cacheKey(job.id, profile.updatedAt), JSON.stringify(result));
-  window.dispatchEvent(new Event(JOB_ANALYSIS_EVENT));
+  saveCachedJobAnalysis(result);
   return result;
 }

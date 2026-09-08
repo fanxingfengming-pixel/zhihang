@@ -26,12 +26,17 @@ export default function CareerCenterPage() {
     ? "尚未保存"
     : new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeZone: "Asia/Shanghai" }).format(new Date(parsedUpdatedAt));
   const target = {
-    role: profile.basics.targetRole || "AI 产品经理",
-    cities: profile.basics.location || "杭州 / 上海",
-    industry: "互联网 / AI",
-    stage: "2027 暑期实习",
+    role: profile.basics.targetRole || "尚未设置",
+    cities: profile.basics.location || "尚未设置",
+    industry: profile.basics.industry || "尚未设置",
+    stage: profile.basics.careerStage || "尚未设置",
   };
-  const [targetDraft, setTargetDraft] = useState(target);
+  const [targetDraft, setTargetDraft] = useState({
+    role: profile.basics.targetRole,
+    cities: profile.basics.location,
+    industry: profile.basics.industry || "",
+    stage: profile.basics.careerStage || "",
+  });
   const storedIntelligence = useCareerIntelligenceHistory();
   const intelligence = storedIntelligence?.profileUpdatedAt === profile.updatedAt ? storedIntelligence : null;
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
@@ -48,7 +53,12 @@ export default function CareerCenterPage() {
   const completedJourneySteps = journey.filter((item) => item.status === "已完成").length;
 
   function openTargetEditor() {
-    setTargetDraft(target);
+    setTargetDraft({
+      role: profile.basics.targetRole,
+      cities: profile.basics.location,
+      industry: profile.basics.industry || "",
+      stage: profile.basics.careerStage || "",
+    });
     setEditingTarget(true);
   }
 
@@ -56,10 +66,10 @@ export default function CareerCenterPage() {
     event.preventDefault();
     const nextProfile = {
       ...profile,
-      basics: { ...profile.basics, targetRole: targetDraft.role, location: targetDraft.cities },
+      basics: { ...profile.basics, targetRole: targetDraft.role, location: targetDraft.cities, industry: targetDraft.industry, careerStage: targetDraft.stage },
       updatedAt: new Date().toISOString(),
     };
-    saveCareerProfile(nextProfile);
+    if (!saveCareerProfile(nextProfile)) return;
     setEditingTarget(false);
     setSaved(true);
   }
@@ -75,7 +85,7 @@ export default function CareerCenterPage() {
       const gap = await runAgent<SkillGapAnalysis>("gap", { profile }, { career: positioning.data });
       setIntelligenceStage("plan");
       const plan = await runAgent<GrowthPlan>("plan", { profile }, { career: positioning.data, gap: gap.data });
-      saveCareerIntelligence({
+      const savedReport = saveCareerIntelligence({
         profileUpdatedAt: profile.updatedAt,
         generatedAt: new Date().toISOString(),
         positioning: positioning.data,
@@ -83,6 +93,7 @@ export default function CareerCenterPage() {
         plan: plan.data,
         meta: plan.meta,
       });
+      if (!savedReport) throw new Error("浏览器无法保存职业报告，请检查存储权限后重试。");
     } catch (error) {
       setIntelligenceError(error instanceof Error ? error.message : "职业智能报告生成失败");
     } finally {

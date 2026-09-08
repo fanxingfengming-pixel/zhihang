@@ -14,7 +14,7 @@ describe("统一事实防护", () => {
     const secured = secureResume({ resumeText: "李明\n示例大学\nFigma\n校园助手\n完成原型" }, {
       ...profile,
       skills: ["Figma", "SQL"],
-      projects: [{ ...profile.projects[0], details: ["完成原型", "使效率提升 80%"] }],
+      projects: [{ ...profile.projects[0], details: ["完成原型", "使效率提升 80%", "主导商业化策略并推动正式上线"] }],
     });
     expect(secured.skills).toEqual(["Figma"]);
     expect(secured.projects[0].details).toEqual(["完成原型"]);
@@ -37,6 +37,23 @@ describe("统一事实防护", () => {
     const secured = secureOptimization({ profile, currentResumeText: "完成原型" }, candidate);
     expect(secured.safeToApply).toBe(false);
     expect(secured.factWarnings.join(" ")).toContain("90%");
+  });
+
+  it("简历优化出现无数字但缺少证据的成果时也禁止直接应用", () => {
+    const candidate: ResumeOptimization = {
+      optimizedProfile: { ...profile, projects: [{ ...profile.projects[0], details: ["完成原型并推动产品正式上线"] }] },
+      optimizedResumeMarkdown: "完成原型并推动产品正式上线",
+      headline: "优化",
+      summary: "",
+      changes: [{ section: "项目", before: "完成原型", after: "完成原型并推动产品正式上线", reason: "补充结果", evidence: ["完成原型"] }],
+      usedKeywords: [],
+      unresolvedGaps: [],
+      factWarnings: [],
+      safeToApply: true,
+    };
+    const secured = secureOptimization({ profile, currentResumeText: "完成原型" }, candidate);
+    expect(secured.safeToApply).toBe(false);
+    expect(secured.factWarnings.join(" ")).toContain("缺少原始材料支撑");
   });
 
   it("投递 Agent 不能引用不存在的记录 ID", () => {

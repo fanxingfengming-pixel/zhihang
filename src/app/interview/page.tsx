@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { useCareerProfile } from "@/hooks/use-career-profile";
+import { useCustomJobs } from "@/hooks/use-custom-jobs";
+import { useJobAnalysis } from "@/hooks/use-job-analysis";
 import { useInterviewHistory } from "@/hooks/use-insight-history";
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
 import { saveInterviewHistory } from "@/lib/insight-history-store";
@@ -39,34 +41,24 @@ function InterviewContent() {
   const params = useSearchParams();
   const router = useRouter();
   const profile = useCareerProfile();
+  const customJobs = useCustomJobs();
+  const allJobs = [...customJobs, ...jobs];
   const interviewHistory = useInterviewHistory();
   const initialId = params.get("job");
-  const [selectedId, setSelectedId] = useState(jobs.some((job) => job.id === initialId) ? initialId! : jobs[0].id);
-  const selectedJob = jobs.find((job) => job.id === selectedId) ?? jobs[0];
-  const analysisKey = `${selectedJob.id}:${profile.updatedAt}`;
-  const [analyses, setAnalyses] = useState<Record<string, JobAnalysisResult>>({});
-  const [analysisErrors, setAnalysisErrors] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState(initialId || jobs[0].id);
+  const selectedJob = allJobs.find((job) => job.id === selectedId) ?? jobs[0];
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [evaluation, setEvaluation] = useState<InterviewEvaluation | null>(null);
   const [loading, setLoading] = useState<"prepare" | "evaluate" | null>(null);
   const [error, setError] = useState("");
-  const analysis = analyses[analysisKey];
+  const [transientAnalysis, setTransientAnalysis] = useState<JobAnalysisResult | null>(null);
+  const cachedAnalysis = useJobAnalysis(selectedJob.id, profile.updatedAt);
+  const analysis = transientAnalysis?.jobId === selectedJob.id && transientAnalysis.profileUpdatedAt === profile.updatedAt
+    ? transientAnalysis
+    : cachedAnalysis;
   const currentQuestion = session?.preparation.questions[currentIndex];
-
-  useEffect(() => {
-    let cancelled = false;
-    void runJobAnalysis(selectedJob, profile).then((result) => {
-      if (!cancelled) setAnalyses((current) => ({ ...current, [analysisKey]: result }));
-    }).catch((cause) => {
-      if (!cancelled) setAnalysisErrors((current) => ({
-        ...current,
-        [analysisKey]: cause instanceof Error ? cause.message : "岗位分析失败",
-      }));
-    });
-    return () => { cancelled = true; };
-  }, [analysisKey, profile, selectedJob]);
 
   function chooseJob(jobId: string) {
     setSelectedId(jobId);
@@ -75,19 +67,22 @@ function InterviewContent() {
     setAnswer("");
     setEvaluation(null);
     setError("");
+    setTransientAnalysis(null);
     router.replace(`/interview?job=${jobId}`);
   }
 
   async function prepareInterview() {
-    if (!analysis || loading) return;
+    if (loading) return;
     setLoading("prepare");
     setError("");
     setEvaluation(null);
     try {
+      const readyAnalysis = analysis || await runJobAnalysis(selectedJob, profile);
+      setTransientAnalysis(readyAnalysis);
       const response = await runAgent<InterviewAgentResult>("interview", {
         action: "prepare",
-        targetJob: analysis.jd.jobTitle,
-      }, { profile, jd: analysis.jd, match: analysis.match });
+        targetJob: readyAnalysis.jd.jobTitle,
+      }, { profile, jd: readyAnalysis.jd, match: readyAnalysis.match });
       if (response.data.action !== "prepare") throw new Error("面试 Agent 返回了错误的任务类型");
       setSession({ preparation: response.data, meta: response.meta });
       setCurrentIndex(0);
@@ -113,7 +108,7 @@ function InterviewContent() {
       }, { profile, jd: analysis.jd, match: analysis.match });
       if (response.data.action !== "evaluate") throw new Error("面试 Agent 返回了错误的任务类型");
       setEvaluation(response.data);
-      saveInterviewHistory([{
+      const savedPractice = saveInterviewHistory([{
         id: `practice-${Date.now()}`,
         jobId: selectedJob.id,
         jobTitle: analysis.jd.jobTitle,
@@ -123,6 +118,7 @@ function InterviewContent() {
         meta: response.meta,
         createdAt: new Date().toISOString(),
       }, ...interviewHistory]);
+      if (!savedPractice) throw new Error("浏览器无法保存本次练习，请检查存储权限后重试。");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "回答评分失败");
     } finally {
@@ -139,7 +135,7 @@ function InterviewContent() {
 
   const status = analysis
     ? `${analysis.meta.demo ? "演示引擎" : analysis.meta.provider} · 匹配度 ${analysis.match.score}%`
-    : analysisErrors[analysisKey] || "正在读取岗位能力模型…";
+    : "尚未分析；生成题目时会先完成岗位分析";
 
   return (
     <AppShell>
@@ -151,7 +147,7 @@ function InterviewContent() {
           <label className="interview-job-select">
             <span>训练岗位</span>
             <select value={selectedJob.id} onChange={(event) => chooseJob(event.target.value)}>
-              {jobs.map((job) => <option key={job.id} value={job.id}>{job.company} · {job.role}</option>)}
+              {allJobs.map((job) => <option key={job.id} value={job.id}>{job.company} · {job.role}</option>)}
             </select>
           </label>
         )}
@@ -187,12 +183,12 @@ function InterviewContent() {
               <span><Mic2 size={28} /></span>
               <p className="eyebrow">READY WHEN YOU ARE</p>
               <h2>为当前岗位生成一轮定向面试</h2>
-              <p>Agent 会读取共享 Career Profile、结构化 JD 和匹配差距，生成 5 道可逐题训练的问题。点击前不会产生新的面试模型调用。</p>
-              {analysisErrors[analysisKey] ? <div className="interview-inline-error"><TriangleAlert size={15} />{analysisErrors[analysisKey]}</div> : null}
-              <button className="primary-button" onClick={() => void prepareInterview()} disabled={!analysis || loading === "prepare"}>
-                {loading === "prepare" ? <><RefreshCw className="spin" size={16} />正在生成题目…</> : <><Sparkles size={16} />生成面试题</>}
+              <p>点击后会先准备岗位分析，再读取共享 Career Profile、结构化 JD 和匹配差距生成 5 道题；进入页面不会调用模型。</p>
+              {error ? <div className="interview-inline-error"><TriangleAlert size={15} />{error}</div> : null}
+              <button className="primary-button" onClick={() => void prepareInterview()} disabled={loading === "prepare"}>
+                {loading === "prepare" ? <><RefreshCw className="spin" size={16} />正在准备岗位分析与题目…</> : <><Sparkles size={16} />生成面试题</>}
               </button>
-              <small>{analysis ? "岗位分析已就绪" : "正在等待 JD 解析与岗位匹配完成"}</small>
+              <small>{analysis ? "岗位分析已就绪" : "点击后将按需调用 JD、匹配与面试 Agent"}</small>
             </div>
           ) : (
             <>

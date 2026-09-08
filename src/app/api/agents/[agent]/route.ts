@@ -1,4 +1,5 @@
 import { generateJson, hasProviderKey, type Provider } from "@/lib/ai/client";
+import { assertSharedAIKeyAccess } from "@/lib/ai/access-control";
 import { getRuntimeAISettings } from "@/lib/ai/runtime-settings";
 import { buildAgentUserMessage, prompts } from "@/lib/ai/prompts";
 import { demoResult } from "@/lib/demo";
@@ -41,6 +42,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ age
     const useDemo = runtimeSettings
       ? runtimeSettings.demoMode || !hasProviderKey(provider, runtimeSettings)
       : process.env.DEMO_MODE === "true" || !hasProviderKey(provider);
+    const usesSessionKey = Boolean(runtimeSettings?.apiKey.trim());
+    if (!useDemo && !usesSessionKey) await assertSharedAIKeyAccess();
     let result: unknown;
     if (useDemo) {
       result = demoResult(agent, body.input, body.context);

@@ -8,12 +8,12 @@ export type ResumeDraft = {
 };
 
 export const defaultResumeDraft: ResumeDraft = {
-  name: "李同学",
-  education: "浙江大学 · 工业设计 · 2027 届",
-  targetRole: "AI 产品经理 / 产品策划",
-  skills: ["Figma", "Axure", "用户研究", "产品需求文档", "AI Agent", "Prompt Design", "Excel"],
-  projectName: "大学生 AI 求职实训智能体空间",
-  projectText: "负责大学生 AI 求职系统设计和开发，完成简历、岗位匹配等功能。",
+  name: "同学",
+  education: "教育信息待补充",
+  targetRole: "求职方向待明确",
+  skills: [],
+  projectName: "项目经历待补充",
+  projectText: "暂未添加项目经历，可通过对话生成器或导入简历补充。",
 };
 
 export function createResumeDraft(answers: string[]): ResumeDraft {

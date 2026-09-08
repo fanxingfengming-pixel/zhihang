@@ -3,7 +3,7 @@
 import { CheckCircle2, CloudDownload, CloudUpload, Database, LoaderCircle, LogIn, LogOut, ShieldCheck, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { exportWorkspaceSnapshot, importWorkspaceSnapshot, type WorkspaceSnapshot } from "@/lib/workspace-sync";
+import { exportWorkspaceSnapshot, hasLocalWorkspaceBackup, importWorkspaceSnapshot, restoreLocalWorkspaceBackup, type WorkspaceSnapshot } from "@/lib/workspace-sync";
 
 type Status = { type: "idle" | "success" | "error"; message: string };
 
@@ -19,8 +19,8 @@ export function CloudSyncPanel({ configured }: { configured: boolean }) {
         <div className="cloud-setup-copy">
           <ShieldCheck size={21} />
           <div>
-            <b>当前数据没有丢失风险</b>
-            <p>Career Profile、投递、职业报告、面试和 Offer 记录仍保存在当前浏览器。启用云同步只需配置两个公开环境变量并执行项目内的数据库迁移。</p>
+            <b>当前数据仅保存在这个浏览器</b>
+            <p>清理浏览器数据或更换设备可能造成丢失。需要跨设备备份时，请配置 Supabase 并执行项目内的数据库迁移。</p>
             <span className="cloud-doc-hint">具体步骤见项目根目录的 DEPLOYMENT.md</span>
           </div>
         </div>
@@ -39,6 +39,7 @@ function ConfiguredCloudSyncPanel() {
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState<string | null>(null);
+  const [hasBackup, setHasBackup] = useState(false);
   const [status, setStatus] = useState<Status>({ type: "idle", message: "" });
 
   useEffect(() => {
@@ -57,6 +58,25 @@ function ConfiguredCloudSyncPanel() {
       data.subscription.unsubscribe();
     };
   }, [supabase]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setHasBackup(hasLocalWorkspaceBackup());
+      if (!currentEmail) {
+        setCloudUpdatedAt(null);
+        return;
+      }
+      fetch("/api/sync")
+        .then(async (response) => {
+          const payload = (await response.json()) as { updatedAt?: string | null };
+          if (active && response.ok) setCloudUpdatedAt(payload.updatedAt || null);
+        })
+        .catch(() => undefined);
+    });
+    return () => { active = false; };
+  }, [currentEmail]);
 
   async function authenticate(mode: "signin" | "signup") {
     if (!email.trim() || password.length < 6) {
@@ -94,7 +114,7 @@ function ConfiguredCloudSyncPanel() {
       const response = await fetch("/api/sync", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(exportWorkspaceSnapshot()),
+        body: JSON.stringify({ snapshot: exportWorkspaceSnapshot(), expectedUpdatedAt: cloudUpdatedAt }),
       });
       const payload = (await response.json()) as { updatedAt?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "上传失败");
@@ -117,12 +137,24 @@ function ConfiguredCloudSyncPanel() {
       if (!response.ok) throw new Error(payload.error || "下载失败");
       if (!payload.data) throw new Error("云端还没有工作区数据，请先从一台设备上传。\n");
       importWorkspaceSnapshot(payload.data);
+      setHasBackup(true);
       setCloudUpdatedAt(payload.updatedAt || null);
       setStatus({ type: "success", message: "云端工作区已恢复到本机，页面数据已更新。" });
     } catch (error) {
+      setHasBackup(hasLocalWorkspaceBackup());
       setStatus({ type: "error", message: error instanceof Error ? error.message.trim() : "下载失败" });
     } finally {
       setBusy(false);
+    }
+  }
+
+  function restoreBackup() {
+    try {
+      if (!restoreLocalWorkspaceBackup()) throw new Error("没有可恢复的本机备份。");
+      setHasBackup(false);
+      setStatus({ type: "success", message: "已恢复云端覆盖前的本机工作区。" });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : "本机备份恢复失败" });
     }
   }
 
@@ -143,6 +175,7 @@ function ConfiguredCloudSyncPanel() {
           <div className="cloud-sync-actions">
             <button type="button" className="primary-button" onClick={upload} disabled={busy}><CloudUpload size={16} />上传本机数据</button>
             <button type="button" className="secondary-button" onClick={download} disabled={busy}><CloudDownload size={16} />从云端恢复</button>
+            {hasBackup ? <button type="button" className="secondary-button" onClick={restoreBackup} disabled={busy}>撤销上次云端恢复</button> : null}
           </div>
           <p className="cloud-safety"><ShieldCheck size={15} />恢复前自动备份当前本机数据；模型 API 密钥不会进入同步快照。</p>
         </div>

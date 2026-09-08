@@ -81,6 +81,7 @@ QWEN_BASE_URL=https://你的WorkspaceId.cn-beijing.maas.aliyuncs.com/compatible-
 
 - `DEMO_MODE=false`：有当前提供商密钥时调用真实模型；没有密钥时自动回退演示引擎。
 - `DEMO_MODE=true`：始终使用本地演示引擎，不产生 API 费用。
+- 生产环境默认只允许登录用户使用服务端共享模型密钥；未配置 Supabase 时，请让用户在设置页填写自己的密钥。只有明确接受匿名调用费用风险时才可设置 `ALLOW_PUBLIC_AI_API=true`。
 
 演示引擎用于验证产品流程，并不等价于真实模型的语义分析质量。
 
@@ -93,7 +94,7 @@ NEXT_PUBLIC_SUPABASE_URL=你的项目地址
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的公开密钥
 ```
 
-然后执行 `supabase/migrations/202609070001_initial_workspace.sql`。登录与同步入口位于 `/settings#cloud-sync`；同步内容包括 Career Profile、投递、职业报告、面试记录和 Offer 对比记录，不包括 DeepSeek/Qwen API 密钥。完整步骤见 `DEPLOYMENT.md`。
+然后执行 `supabase/migrations/202609070001_initial_workspace.sql`。登录与同步入口位于 `/settings#cloud-sync`；同步内容包括 Career Profile、投递、职业报告、面试记录和 Offer 对比记录，不包括 DeepSeek/Qwen API 密钥，也不包括用户粘贴的自定义 JD。完整步骤见 `DEPLOYMENT.md`。
 
 ## 数据结构
 
@@ -168,6 +169,15 @@ pnpm build
 pnpm test:e2e
 ```
 
+如需用真实模型对 10 个 Agent 各执行一次基线冒烟评测，可在已配置 API 密钥后运行：
+
+```powershell
+$env:LIVE_AI_PROVIDER="qwen" # 或 deepseek
+pnpm test:evals:live
+```
+
+该命令会发起 10 次模型请求并产生对应 API 用量；常规 `pnpm test` 与 CI 不会运行这些真实请求。
+
 ## MVP 边界与下一步
 
-未配置 Supabase 时，数据只保存在当前浏览器；配置后支持账号与单用户工作区跨设备同步。当前同步采用每用户一份 JSONB 快照，适合 MVP，不提供多人实时协作或逐条历史版本。岗位列表仍是演示数据，真实岗位需由用户粘贴 JD；AI 工作区的自由对话仍是引导式交互；系统不会自动投递、发送邮件或联系招聘方。后续可继续增加合规岗位源、简历 PDF 导出、文件对象存储和团队协作。
+未配置 Supabase 时，数据只保存在当前浏览器；配置后支持账号与单用户工作区跨设备同步。当前同步采用每用户一份 JSONB 快照，并使用更新时间做冲突检测，适合 MVP，但不提供多人实时协作或逐条历史版本。自定义 JD 仅保存在当前浏览器，不进入云同步。岗位列表仍是演示数据，真实岗位需由用户粘贴 JD；AI 工作区的自由对话仍是引导式交互；系统不会自动投递、发送邮件或联系招聘方。后续可继续增加合规岗位源、简历 PDF 导出、文件对象存储和团队协作。

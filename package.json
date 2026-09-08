@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:evals": "vitest run tests/prompt-evals.test.ts",
+    "test:evals:live": "node scripts/run-live-evals.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

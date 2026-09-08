@@ -17,6 +17,8 @@ export const CareerProfileSchema = z.object({
     grade: z.string(),
     targetRole: z.string(),
     location: z.string(),
+    industry: z.string().optional(),
+    careerStage: z.string().optional(),
   }),
   skills: z.array(z.string()),
   strengths: z.array(z.string()),
@@ -239,7 +241,7 @@ export type OfferDecision = z.infer<typeof OfferDecisionSchema>;
 export type AgentName = "resume" | "jd" | "match" | "optimize" | "interview" | "career" | "gap" | "plan" | "application" | "offer";
 
 export const EMPTY_PROFILE: CareerProfile = {
-  basics: { name: "", school: "", major: "", grade: "", targetRole: "", location: "" },
+  basics: { name: "", school: "", major: "", grade: "", targetRole: "", location: "", industry: "", careerStage: "" },
   skills: [],
   strengths: [],
   projects: [],

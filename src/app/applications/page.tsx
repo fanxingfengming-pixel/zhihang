@@ -20,17 +20,20 @@ import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { useApplications } from "@/hooks/use-applications";
 import { useCareerProfile } from "@/hooks/use-career-profile";
 import { useOfferHistory } from "@/hooks/use-insight-history";
+import { useOfferDrafts } from "@/hooks/use-offer-drafts";
 import { runAgent, type AgentMeta } from "@/lib/agent-client";
 import { saveApplications } from "@/lib/application-store";
 import { saveOfferHistory } from "@/lib/insight-history-store";
+import { saveOfferDrafts } from "@/lib/offer-draft-store";
 import type { ApplicationManagement, ApplicationRecord, ApplicationStage, OfferCandidate, OfferDecision } from "@/lib/schemas";
 
-const stages: Array<{ id: Exclude<ApplicationStage, "closed">; label: string }> = [
+const stages: Array<{ id: ApplicationStage; label: string }> = [
   { id: "interested", label: "感兴趣" },
   { id: "preparing", label: "准备中" },
   { id: "applied", label: "已投递" },
   { id: "interview", label: "面试中" },
   { id: "offer", label: "已获 Offer" },
+  { id: "closed", label: "已关闭" },
 ];
 
 const emptyOffer = (id: string): OfferCandidate => ({
@@ -46,10 +49,12 @@ const emptyOffer = (id: string): OfferCandidate => ({
   notes: "",
 });
 
+const INITIAL_OFFERS = [emptyOffer("offer-a"), emptyOffer("offer-b")];
+
 type ApplicationDraft = {
   company: string;
   role: string;
-  stage: Exclude<ApplicationStage, "closed">;
+  stage: ApplicationStage;
   nextAction: string;
   deadline: string;
 };
@@ -58,13 +63,14 @@ export default function ApplicationsPage() {
   const applications = useApplications();
   const profile = useCareerProfile();
   const offerHistory = useOfferHistory();
+  const storedOfferDrafts = useOfferDrafts();
   const activeApplications = applications.filter((item) => item.stage !== "closed");
   const [managerReport, setManagerReport] = useState<{ data: ApplicationManagement; meta: AgentMeta } | null>(null);
   const [managerLoading, setManagerLoading] = useState(false);
   const [managerError, setManagerError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [draft, setDraft] = useState<ApplicationDraft>({ company: "", role: "", stage: "interested", nextAction: "", deadline: "" });
-  const [offers, setOffers] = useState<OfferCandidate[]>([emptyOffer("offer-a"), emptyOffer("offer-b")]);
+  const offers = storedOfferDrafts.length >= 2 ? storedOfferDrafts : INITIAL_OFFERS;
   const [offerReport, setOfferReport] = useState<{ data: OfferDecision; meta: AgentMeta } | null>(null);
   const [offerLoading, setOfferLoading] = useState(false);
   const [offerError, setOfferError] = useState("");
@@ -75,14 +81,14 @@ export default function ApplicationsPage() {
   }
 
   function updateApplication(id: string, patch: Partial<ApplicationRecord>) {
-    saveApplications(applications.map((item) => item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item));
+    if (!saveApplications(applications.map((item) => item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item))) return;
     resetManagerReport();
   }
 
   function removeApplication(id: string) {
     const application = applications.find((item) => item.id === id);
     if (!window.confirm(`确认删除“${application?.company || "这条"}”投递记录？删除后无法撤销。`)) return;
-    saveApplications(applications.filter((item) => item.id !== id));
+    if (!saveApplications(applications.filter((item) => item.id !== id))) return;
     resetManagerReport();
   }
 
@@ -99,7 +105,7 @@ export default function ApplicationsPage() {
       notes: "",
       updatedAt: new Date().toISOString(),
     };
-    saveApplications([...applications, record]);
+    if (!saveApplications([...applications, record])) return;
     setDraft({ company: "", role: "", stage: "interested", nextAction: "", deadline: "" });
     setAddOpen(false);
     resetManagerReport();
@@ -120,13 +126,13 @@ export default function ApplicationsPage() {
   }
 
   function updateOffer(id: string, field: keyof OfferCandidate, value: string | number) {
-    setOffers((current) => current.map((offer) => offer.id === id ? { ...offer, [field]: value } : offer));
+    saveOfferDrafts(offers.map((offer) => offer.id === id ? { ...offer, [field]: value } : offer));
     setOfferReport(null);
     setOfferError("");
   }
 
   function loadOfferExample() {
-    setOffers([
+    saveOfferDrafts([
       { id: "offer-a", company: "A 公司（示例）", role: "AI 产品实习生", location: "上海", monthlySalary: 9000, salaryMonths: 12, bonus: 0, growth: "参与完整 AI 产品迭代", workLife: "待向团队核实", notes: "示例数据，请替换为书面 Offer 信息" },
       { id: "offer-b", company: "B 公司（示例）", role: "产品策划实习生", location: "杭州", monthlySalary: 7500, salaryMonths: 13, bonus: 3000, growth: "有导师和轮岗机会", workLife: "待向团队核实", notes: "示例数据，请替换为书面 Offer 信息" },
     ]);
@@ -145,13 +151,14 @@ export default function ApplicationsPage() {
     try {
       const response = await runAgent<OfferDecision>("offer", { offers: comparable }, { profile });
       setOfferReport(response);
-      saveOfferHistory([{
+      const savedComparison = saveOfferHistory([{
         id: `comparison-${Date.now()}`,
         offers: comparable,
         decision: response.data,
         meta: response.meta,
         createdAt: new Date().toISOString(),
       }, ...offerHistory]);
+      if (!savedComparison) throw new Error("浏览器无法保存 Offer 比较，请检查存储权限后重试。");
     } catch (error) {
       setOfferError(error instanceof Error ? error.message : "Offer 比较失败");
     } finally {
@@ -165,10 +172,10 @@ export default function ApplicationsPage() {
 
       <section className="application-dashboard">
         <article className="application-board">
-          <div className="application-board-head"><div><p className="eyebrow">MY PIPELINE</p><h2>投递进度</h2><span>{activeApplications.length} 条进行中 · 首次打开包含可删除的示例记录</span></div><button className="secondary-button" onClick={() => void analyzeApplications()} disabled={managerLoading}>{managerLoading ? <><RefreshCw size={14} className="spin" />正在分析…</> : <><Sparkles size={14} />AI 整理下一步</>}</button></div>
-          <div className="pipeline-stats">{stages.map((stage) => <div key={stage.id}><strong>{activeApplications.filter((item) => item.stage === stage.id).length}</strong><span>{stage.label}</span></div>)}</div>
+          <div className="application-board-head"><div><p className="eyebrow">MY PIPELINE</p><h2>投递进度</h2><span>{activeApplications.length} 条进行中 · {applications.filter((item) => item.stage === "closed").length} 条已关闭</span></div><button className="secondary-button" onClick={() => void analyzeApplications()} disabled={managerLoading || activeApplications.length === 0}>{managerLoading ? <><RefreshCw size={14} className="spin" />正在分析…</> : <><Sparkles size={14} />AI 整理下一步</>}</button></div>
+          <div className="pipeline-stats">{stages.map((stage) => <div key={stage.id}><strong>{applications.filter((item) => item.stage === stage.id).length}</strong><span>{stage.label}</span></div>)}</div>
           <div className="application-list">
-            {activeApplications.length ? activeApplications.map((item) => <article key={item.id} className="application-row">
+            {applications.length ? applications.map((item) => <article key={item.id} className="application-row">
               <span className="company-mark">{item.company.slice(0, 1)}</span>
               <div className="application-main"><small>{item.company}</small><b>{item.role}</b><p>{item.nextAction || "尚未填写下一步行动"}</p></div>
               <label><span>阶段</span><select name={`stage-${item.id}`} value={item.stage} onChange={(event) => updateApplication(item.id, { stage: event.target.value as ApplicationStage })}>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select></label>
@@ -196,7 +203,7 @@ export default function ApplicationsPage() {
         <div className="offer-grid">
           <div className="offer-inputs">
             {offers.map((offer, index) => <article className="offer-card" key={offer.id}>
-              <div className="offer-card-title"><span>{String(index + 1).padStart(2, "0")}</span><h3>Offer {String.fromCharCode(65 + index)}</h3>{offers.length > 2 ? <button onClick={() => setOffers((current) => current.filter((item) => item.id !== offer.id))} aria-label="删除这份 Offer"><X size={13} /></button> : null}</div>
+              <div className="offer-card-title"><span>{String(index + 1).padStart(2, "0")}</span><h3>Offer {String.fromCharCode(65 + index)}</h3>{offers.length > 2 ? <button onClick={() => saveOfferDrafts(offers.filter((item) => item.id !== offer.id))} aria-label="删除这份 Offer"><X size={13} /></button> : null}</div>
               <div className="offer-fields">
                 <label>公司<input name={`company-${offer.id}`} value={offer.company} onChange={(event) => updateOffer(offer.id, "company", event.target.value)} autoComplete="organization" placeholder="以书面 Offer 为准…" /></label>
                 <label>岗位<input name={`role-${offer.id}`} value={offer.role} onChange={(event) => updateOffer(offer.id, "role", event.target.value)} autoComplete="organization-title" placeholder="岗位名称…" /></label>
@@ -208,7 +215,7 @@ export default function ApplicationsPage() {
                 <label className="wide">工作节奏<input name={`work-life-${offer.id}`} value={offer.workLife} onChange={(event) => updateOffer(offer.id, "workLife", event.target.value)} autoComplete="off" placeholder="仅填写已核实信息…" /></label>
               </div>
             </article>)}
-            <button className="add-offer-button" onClick={() => setOffers((current) => [...current, emptyOffer(`offer-${Date.now()}`)])}><Plus size={14} />再添加一份 Offer</button>
+            <button className="add-offer-button" onClick={() => saveOfferDrafts([...offers, emptyOffer(`offer-${crypto.randomUUID()}`)])} disabled={offers.length >= 10}><Plus size={14} />{offers.length >= 10 ? "最多 10 份 Offer" : "再添加一份 Offer"}</button>
           </div>
           <aside className="offer-report">
             <div className="offer-report-head"><span><Sparkles size={15} /></span><p><small>AGENT 10</small><b>Offer 决策 Agent</b></p></div>

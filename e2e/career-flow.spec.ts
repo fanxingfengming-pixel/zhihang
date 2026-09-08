@@ -1,5 +1,33 @@
 import { expect, test } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+});
+
+test("新用户从空白真实状态开始，浏览页面不会自动调用 Agent", async ({ page }) => {
+  const agentCalls: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/agents/")) agentCalls.push(request.url());
+  });
+
+  await page.goto("/");
+  await expect(page.locator(".readiness strong")).toContainText("0%");
+  await expect(page.locator("body")).not.toContainText("李同学");
+  await expect(page.locator("body")).not.toContainText("浙江大学");
+
+  await page.goto("/jobs");
+  await expect(page.getByText("等待开始分析")).toBeVisible();
+  await page.goto("/workspace");
+  await expect(page.getByRole("button", { name: "先运行岗位分析" })).toBeVisible();
+  await page.goto("/interview");
+  await expect(page.getByRole("button", { name: "生成面试题" })).toBeVisible();
+  expect(agentCalls).toEqual([]);
+});
+
 test("真实材料导入到 Offer 比较的核心链路", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/settings");
@@ -28,6 +56,12 @@ test("真实材料导入到 Offer 比较的核心链路", async ({ page }) => {
   await page.getByRole("button", { name: /确认并保存档案/ }).click();
   await expect(page.getByText(/对话内容已整理为结构化简历/)).toBeVisible();
 
+  await page.getByRole("button", { name: "手动编辑" }).click();
+  await page.getByLabel("手动编辑项目经历").fill("我完成学生访谈、需求整理和原型设计，并保留了可核验的项目材料。回归保存标记");
+  await page.getByRole("button", { name: "保存修改" }).click();
+  await page.reload();
+  await expect(page.getByText(/回归保存标记/)).toBeVisible();
+
   await page.goto("/jobs");
   await page.getByRole("button", { name: /粘贴真实 JD/ }).click();
   await page.getByLabel("JD 原文").fill("公司：示例科技\n岗位：AI 产品实习生\n岗位职责：参与用户需求分析和产品原型设计。\n任职要求：熟悉 Figma、数据分析和沟通协作。");
@@ -55,6 +89,38 @@ test("真实材料导入到 Offer 比较的核心链路", async ({ page }) => {
   await page.getByRole("button", { name: "AI 比较 Offer" }).click();
   await expect(page.getByText(/年度现金合计/).first()).toBeVisible();
   await expect(page.getByText("需要核实")).toBeVisible();
+});
+
+test("自定义 JD 会在岗位、简历工作区和面试页之间保持接线", async ({ page }) => {
+  const settingsResponse = await page.request.post("/api/settings/ai", {
+    headers: { Origin: "http://localhost:3000" },
+    data: {
+      provider: "qwen",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen-plus",
+      demoMode: true,
+    },
+  });
+  expect(settingsResponse.ok()).toBeTruthy();
+
+  await page.goto("/jobs");
+  await page.getByRole("button", { name: /粘贴真实 JD/ }).click();
+  await page.getByLabel("JD 原文").fill("公司：星河实验室\n岗位：智能体产品实习生\n岗位职责：完成用户调研、智能体流程设计和原型验证。\n任职要求：熟悉产品设计、Figma、数据分析与沟通协作。");
+  await page.getByRole("button", { name: /解析并匹配/ }).click();
+  await expect(page.getByText("星河实验室", { exact: true }).first()).toBeVisible();
+
+  const workspaceLink = page.getByRole("link", { name: /针对该岗位优化简历/ });
+  const interviewLink = page.getByRole("link", { name: /开始岗位模拟面试/ });
+  const workspaceHref = await workspaceLink.getAttribute("href");
+  const interviewHref = await interviewLink.getAttribute("href");
+  expect(workspaceHref).toMatch(/^\/workspace\?job=custom-/);
+  expect(interviewHref).toMatch(/^\/interview\?job=custom-/);
+
+  await page.goto(workspaceHref!);
+  await expect(page.locator(".target-job-mini")).toContainText("星河实验室");
+  await page.goto(interviewHref!);
+  await expect(page.locator(".interview-job-select select")).toHaveValue(interviewHref!.split("job=")[1]);
+  await expect(page.locator(".interview-target")).toContainText("星河实验室");
 });
 
 test("账号同步入口在未配置和已配置环境下均可安全打开", async ({ page }) => {

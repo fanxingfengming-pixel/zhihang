@@ -26,6 +26,8 @@ a { color: inherit; text-decoration: none; }
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }
+.storage-error-banner { margin-bottom: 16px; padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e8c5ba; border-radius: 10px; background: #fff2ed; color: #8b4634; font-size: 13px; }
+.storage-error-banner button { border: 0; background: transparent; color: inherit; cursor: pointer; }
 button, input, textarea { outline: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { box-shadow: 0 0 0 3px rgba(53,111,214,.2); }
 ::selection { background: #cddff1; color: #102f58; }

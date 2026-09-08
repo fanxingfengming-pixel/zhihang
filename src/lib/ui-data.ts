@@ -7,6 +7,8 @@ export type Job = {
   match: number;
   initials: string;
   posted: string;
+  createdAt?: string;
+  sourceText?: string;
   tags: string[];
   summary: string;
   responsibilities: string[];

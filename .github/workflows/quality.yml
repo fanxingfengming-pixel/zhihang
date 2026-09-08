@@ -24,3 +24,7 @@ jobs:
       - run: pnpm build
         env:
           DEMO_MODE: "true"
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+        env:
+          DEMO_MODE: "true"

@@ -4,6 +4,7 @@ const NO_STORE_HEADERS = {
 } as const;
 
 const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+const MAX_RATE_LIMIT_IDENTITIES = 10_000;
 
 export class RequestSecurityError extends Error {
   constructor(
@@ -47,6 +48,15 @@ export function protectMutation(
   const limit = options.limit ?? 30;
   const windowMs = options.windowMs ?? 60_000;
   const now = Date.now();
+  if (rateLimitStore.size >= MAX_RATE_LIMIT_IDENTITIES) {
+    for (const [storedKey, entry] of rateLimitStore) {
+      if (entry.resetAt <= now) rateLimitStore.delete(storedKey);
+    }
+    if (rateLimitStore.size >= MAX_RATE_LIMIT_IDENTITIES) {
+      const oldestKey = rateLimitStore.keys().next().value;
+      if (oldestKey) rateLimitStore.delete(oldestKey);
+    }
+  }
   const key = `${scope}:${requestIdentity(request)}`;
   const current = rateLimitStore.get(key);
 

@@ -1,35 +1,16 @@
-import { CareerProfileSchema, type CareerProfile } from "@/lib/schemas";
-import { defaultResumeDraft, type ResumeDraft } from "@/lib/resume-draft";
+import { CareerProfileSchema, EMPTY_PROFILE, type CareerProfile } from "@/lib/schemas";
+import type { ResumeDraft } from "@/lib/resume-draft";
+import { readLocalStorageItem, removeLocalStorageItem, writeLocalStorageItem } from "@/lib/browser-storage";
 
-export const CAREER_PROFILE_STORAGE_KEY = "zhihang-career-profile";
+export const CAREER_PROFILE_STORAGE_KEY = "zhihang-career-profile:v1";
 export const CAREER_PROFILE_EVENT = "zhihang-career-profile-change";
+const LEGACY_CAREER_PROFILE_STORAGE_KEY = "zhihang-career-profile";
 
-export const DEFAULT_CAREER_PROFILE: CareerProfile = {
-  basics: {
-    name: defaultResumeDraft.name,
-    school: "浙江大学",
-    major: "工业设计",
-    grade: "2027 届",
-    targetRole: defaultResumeDraft.targetRole,
-    location: "杭州 / 上海",
-  },
-  skills: defaultResumeDraft.skills,
-  strengths: ["产品设计", "用户研究", "AI 工具实践"],
-  projects: [{
-    title: defaultResumeDraft.projectName,
-    organization: "个人 / 校内项目",
-    period: "近期项目",
-    role: "核心成员",
-    details: [defaultResumeDraft.projectText],
-    result: "",
-  }],
-  resumeMarkdown: "",
-  updatedAt: "2026-09-06T00:00:00.000Z",
-};
+export const DEFAULT_CAREER_PROFILE: CareerProfile = EMPTY_PROFILE;
 
 export function loadCareerProfile() {
   if (typeof window === "undefined") return null;
-  const saved = window.localStorage.getItem(CAREER_PROFILE_STORAGE_KEY);
+  const saved = readLocalStorageItem(CAREER_PROFILE_STORAGE_KEY, LEGACY_CAREER_PROFILE_STORAGE_KEY);
   if (!saved) return null;
   try {
     const parsed = CareerProfileSchema.safeParse(JSON.parse(saved));
@@ -37,22 +18,23 @@ export function loadCareerProfile() {
   } catch {
     // A malformed local draft should never prevent the workspace from opening.
   }
-  window.localStorage.removeItem(CAREER_PROFILE_STORAGE_KEY);
+  removeLocalStorageItem(CAREER_PROFILE_STORAGE_KEY);
   return null;
 }
 
 export function saveCareerProfile(profile: CareerProfile) {
-  window.localStorage.setItem(CAREER_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  if (!writeLocalStorageItem(CAREER_PROFILE_STORAGE_KEY, JSON.stringify(profile))) return false;
   window.dispatchEvent(new Event(CAREER_PROFILE_EVENT));
+  return true;
 }
 
 export function getCareerProfileSnapshot() {
-  return typeof window === "undefined" ? null : window.localStorage.getItem(CAREER_PROFILE_STORAGE_KEY);
+  return readLocalStorageItem(CAREER_PROFILE_STORAGE_KEY, LEGACY_CAREER_PROFILE_STORAGE_KEY);
 }
 
 export function subscribeCareerProfile(onStoreChange: () => void) {
   function handleStorage(event: StorageEvent) {
-    if (event.key === CAREER_PROFILE_STORAGE_KEY) onStoreChange();
+    if ([CAREER_PROFILE_STORAGE_KEY, LEGACY_CAREER_PROFILE_STORAGE_KEY].includes(event.key || "")) onStoreChange();
   }
   window.addEventListener("storage", handleStorage);
   window.addEventListener(CAREER_PROFILE_EVENT, onStoreChange);
@@ -85,4 +67,22 @@ export function careerProfileToResumeDraft(profile: CareerProfile): ResumeDraft 
     projectName: project?.title || "项目经历待补充",
     projectText,
   };
+}
+
+export function careerProfileToMarkdown(profile: CareerProfile) {
+  const education = [profile.basics.school, profile.basics.major, profile.basics.grade].filter(Boolean).join(" · ");
+  const projects = profile.projects.map((project) => [
+    `### ${project.title}`,
+    [project.organization, project.role, project.period].filter(Boolean).join(" · "),
+    ...project.details.map((detail) => `- ${detail}`),
+    ...(project.result ? [`- ${project.result}`] : []),
+  ].filter(Boolean).join("\n")).join("\n\n");
+
+  return [
+    `# ${profile.basics.name || "姓名待补充"}`,
+    profile.basics.targetRole ? `**求职方向：** ${profile.basics.targetRole}` : "",
+    education ? `## 教育背景\n${education}` : "",
+    profile.skills.length ? `## 核心技能\n${profile.skills.map((skill) => `- ${skill}`).join("\n")}` : "",
+    projects ? `## 项目经历\n${projects}` : "",
+  ].filter(Boolean).join("\n\n");
 }

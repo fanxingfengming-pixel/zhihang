@@ -20,6 +20,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useCareerProfile } from "@/hooks/use-career-profile";
 import { countProjectsMissingResults } from "@/lib/career-profile-metrics";
+import { STORAGE_FAILURE_EVENT } from "@/lib/browser-storage";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [storageError, setStorageError] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const projectsMissingResults = countProjectsMissingResults(profile);
 
@@ -50,6 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    const handleStorageFailure = () => setStorageError(true);
+    window.addEventListener(STORAGE_FAILURE_EVENT, handleStorageFailure);
+    return () => window.removeEventListener(STORAGE_FAILURE_EVENT, handleStorageFailure);
   }, []);
 
   function submitSearch(event: FormEvent) {
@@ -118,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : null}
           </div>
         </header>
-        <main id="main-content" className="page-content" tabIndex={-1}>{children}</main>
+        <main id="main-content" className="page-content" tabIndex={-1}>{storageError ? <div className="storage-error-banner" role="alert"><span>浏览器无法保存数据。请检查隐私模式或存储空间后重试。</span><button onClick={() => setStorageError(false)} aria-label="关闭存储错误提示"><X size={14} /></button></div> : null}{children}</main>
       </section>
     </div>
   );

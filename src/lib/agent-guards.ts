@@ -28,6 +28,24 @@ function sourceContains(source: string, phrase: string) {
   return phrase.trim().length > 0 && source.toLowerCase().includes(phrase.trim().toLowerCase());
 }
 
+export function isClaimGrounded(source: string, claim: string) {
+  const normalizedSource = source.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const normalizedClaim = claim.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  if (!normalizedClaim) return true;
+  if (normalizedSource.includes(normalizedClaim)) return true;
+  if (normalizedClaim.length < 4) return false;
+
+  const grams = new Set<string>();
+  for (let index = 0; index < normalizedClaim.length - 1; index += 1) {
+    grams.add(normalizedClaim.slice(index, index + 2));
+  }
+  let matches = 0;
+  for (const gram of grams) {
+    if (normalizedSource.includes(gram)) matches += 1;
+  }
+  return matches >= 2 && matches / grams.size >= 0.35;
+}
+
 function profileToMarkdown(profile: CareerProfile) {
   return `# ${profile.basics.name || "同学"}\n\n**求职方向：** ${profile.basics.targetRole || "待明确"}\n\n## 教育背景\n${[profile.basics.school, profile.basics.major, profile.basics.grade].filter(Boolean).join(" · ")}\n\n## 核心技能\n${profile.skills.map((skill) => `- ${skill}`).join("\n")}\n\n## 项目经历\n${profile.projects.map((project) => `### ${project.title}\n${project.details.map((detail) => `- ${detail}`).join("\n")}${project.result ? `\n- ${project.result}` : ""}`).join("\n\n")}`;
 }
@@ -44,8 +62,8 @@ export function secureResume(input: unknown, candidateInput: unknown) {
     organization: sourceContains(sourceText, project.organization) ? project.organization : "",
     period: sourceContains(sourceText, project.period) ? project.period : "",
     role: sourceContains(sourceText, project.role) ? project.role : "",
-    details: project.details.filter((detail) => !containsUnsupportedNumber(detail, sourceNumbers)),
-    result: containsUnsupportedNumber(project.result, sourceNumbers) ? "" : project.result,
+    details: project.details.filter((detail) => isClaimGrounded(sourceText, detail) && !containsUnsupportedNumber(detail, sourceNumbers)),
+    result: isClaimGrounded(sourceText, project.result) && !containsUnsupportedNumber(project.result, sourceNumbers) ? project.result : "",
   }));
   const normalized: CareerProfile = {
     basics: safeBasics,
@@ -74,6 +92,12 @@ export function secureOptimization(input: unknown, candidate: ResumeOptimization
   const sourceNumbers = numberTokens(sourceText);
   const proposedText = [candidate.optimizedResumeMarkdown, ...candidate.optimizedProfile.projects.flatMap((project) => [...project.details, project.result]), ...candidate.changes.map((change) => change.after)].join("\n");
   for (const token of numberTokens(proposedText)) if (!sourceNumbers.has(token)) warnings.add(`优化结果新增了未经证实的数字“${token}”。`);
+  for (const claim of candidate.optimizedProfile.projects.flatMap((project) => [...project.details, project.result]).filter(Boolean)) {
+    if (!isClaimGrounded(sourceText, claim)) warnings.add(`优化结果包含缺少原始材料支撑的表述“${claim}”。`);
+  }
+  for (const change of candidate.changes) {
+    if (change.after.trim() && !isClaimGrounded(sourceText, change.after)) warnings.add(`“${change.section}”的改写超出了原始材料证据。`);
+  }
 
   const projects = source.profile.projects.map((project, index) => {
     const optimized = candidate.optimizedProfile.projects[index];

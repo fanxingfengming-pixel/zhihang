@@ -11,6 +11,11 @@ const rlsTest = readFileSync(
   "utf8",
 ).toLowerCase();
 
+const syncRoute = readFileSync(
+  new URL("../src/app/api/sync/route.ts", import.meta.url),
+  "utf8",
+).toLowerCase();
+
 describe("Supabase workspace schema", () => {
   it("keeps the public table inaccessible to anonymous users", () => {
     expect(migration).toContain("enable row level security");
@@ -39,5 +44,11 @@ describe("Supabase workspace schema", () => {
     expect(rlsTest).toContain("another user reads no workspace rows");
     expect(rlsTest).toContain("an owner can delete their workspace");
     expect(rlsTest).toContain("select plan(15)");
+  });
+
+  it("uses optimistic concurrency instead of overwriting a newer cloud snapshot", () => {
+    expect(syncRoute).toContain("expectedupdatedat");
+    expect(syncRoute).toContain('.eq("updated_at", parsed.data.expectedupdatedat)');
+    expect(syncRoute).toContain("status: 409");
   });
 });

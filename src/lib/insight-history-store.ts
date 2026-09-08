@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CareerPositioningSchema, GrowthPlanSchema, InterviewEvaluationSchema, OfferCandidateSchema, OfferDecisionSchema, SkillGapAnalysisSchema } from "@/lib/schemas";
+import { readLocalStorageItem, removeLocalStorageItem, writeLocalStorageItem } from "@/lib/browser-storage";
 
 const AgentMetaSchema = z.object({ provider: z.string(), demo: z.boolean() });
 
@@ -35,13 +36,16 @@ export type CareerIntelligenceRecord = z.infer<typeof CareerIntelligenceRecordSc
 export type InterviewPracticeRecord = z.infer<typeof InterviewPracticeRecordSchema>;
 export type OfferComparisonRecord = z.infer<typeof OfferComparisonRecordSchema>;
 
-export const CAREER_INTELLIGENCE_STORAGE_KEY = "zhihang-career-intelligence";
-export const INTERVIEW_HISTORY_STORAGE_KEY = "zhihang-interview-history";
-export const OFFER_HISTORY_STORAGE_KEY = "zhihang-offer-history";
+export const CAREER_INTELLIGENCE_STORAGE_KEY = "zhihang-career-intelligence:v1";
+export const INTERVIEW_HISTORY_STORAGE_KEY = "zhihang-interview-history:v1";
+export const OFFER_HISTORY_STORAGE_KEY = "zhihang-offer-history:v1";
+const LEGACY_CAREER_INTELLIGENCE_STORAGE_KEY = "zhihang-career-intelligence";
+const LEGACY_INTERVIEW_HISTORY_STORAGE_KEY = "zhihang-interview-history";
+const LEGACY_OFFER_HISTORY_STORAGE_KEY = "zhihang-offer-history";
 const INSIGHT_EVENT = "zhihang-insight-history-change";
 
-function getItem(key: string) {
-  return typeof window === "undefined" ? null : window.localStorage.getItem(key);
+function getItem(key: string, legacyKey: string) {
+  return readLocalStorageItem(key, legacyKey);
 }
 
 function parseItem<T>(snapshot: string | null, schema: z.ZodType<T>, fallback: T) {
@@ -55,13 +59,14 @@ function parseItem<T>(snapshot: string | null, schema: z.ZodType<T>, fallback: T
 }
 
 function saveItem(key: string, value: unknown) {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  if (!writeLocalStorageItem(key, JSON.stringify(value))) return false;
   window.dispatchEvent(new Event(INSIGHT_EVENT));
+  return true;
 }
 
 export function subscribeInsightHistory(onStoreChange: () => void) {
   function handleStorage(event: StorageEvent) {
-    if ([CAREER_INTELLIGENCE_STORAGE_KEY, INTERVIEW_HISTORY_STORAGE_KEY, OFFER_HISTORY_STORAGE_KEY].includes(event.key || "")) onStoreChange();
+    if ([CAREER_INTELLIGENCE_STORAGE_KEY, INTERVIEW_HISTORY_STORAGE_KEY, OFFER_HISTORY_STORAGE_KEY, LEGACY_CAREER_INTELLIGENCE_STORAGE_KEY, LEGACY_INTERVIEW_HISTORY_STORAGE_KEY, LEGACY_OFFER_HISTORY_STORAGE_KEY].includes(event.key || "")) onStoreChange();
   }
   window.addEventListener("storage", handleStorage);
   window.addEventListener(INSIGHT_EVENT, onStoreChange);
@@ -71,9 +76,9 @@ export function subscribeInsightHistory(onStoreChange: () => void) {
   };
 }
 
-export const getCareerIntelligenceSnapshot = () => getItem(CAREER_INTELLIGENCE_STORAGE_KEY);
-export const getInterviewHistorySnapshot = () => getItem(INTERVIEW_HISTORY_STORAGE_KEY);
-export const getOfferHistorySnapshot = () => getItem(OFFER_HISTORY_STORAGE_KEY);
+export const getCareerIntelligenceSnapshot = () => getItem(CAREER_INTELLIGENCE_STORAGE_KEY, LEGACY_CAREER_INTELLIGENCE_STORAGE_KEY);
+export const getInterviewHistorySnapshot = () => getItem(INTERVIEW_HISTORY_STORAGE_KEY, LEGACY_INTERVIEW_HISTORY_STORAGE_KEY);
+export const getOfferHistorySnapshot = () => getItem(OFFER_HISTORY_STORAGE_KEY, LEGACY_OFFER_HISTORY_STORAGE_KEY);
 
 export const parseCareerIntelligence = (snapshot: string | null) => parseItem(snapshot, CareerIntelligenceRecordSchema.nullable(), null);
 export const parseInterviewHistory = (snapshot: string | null) => parseItem(snapshot, z.array(InterviewPracticeRecordSchema), []);
@@ -84,6 +89,7 @@ export const saveInterviewHistory = (records: InterviewPracticeRecord[]) => save
 export const saveOfferHistory = (records: OfferComparisonRecord[]) => saveItem(OFFER_HISTORY_STORAGE_KEY, records.slice(0, 20));
 
 export function clearCareerIntelligence() {
-  window.localStorage.removeItem(CAREER_INTELLIGENCE_STORAGE_KEY);
+  if (!removeLocalStorageItem(CAREER_INTELLIGENCE_STORAGE_KEY)) return false;
   window.dispatchEvent(new Event(INSIGHT_EVENT));
+  return true;
 }
