@@ -1,3 +1,3 @@
-ignoredBuiltDependencies:
+allowBuilds:
   # 该可选原生解析器已有预编译包，本项目不需要执行其安装脚本。
-  - unrs-resolver
+  unrs-resolver: false
