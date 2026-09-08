@@ -8,6 +8,7 @@ import { AGENT_OUTPUT_SCHEMAS, isAgentName } from "@/lib/agent-registry";
 import {
   looksLikePromptLeakage,
   privateJson,
+  protectAIDataConsent,
   protectMutation,
   readJsonWithLimit,
   redactSecrets,
@@ -42,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ age
     const useDemo = runtimeSettings
       ? runtimeSettings.demoMode || !hasProviderKey(provider, runtimeSettings)
       : process.env.DEMO_MODE === "true" || !hasProviderKey(provider);
+    protectAIDataConsent(request, useDemo);
     const usesSessionKey = Boolean(runtimeSettings?.apiKey.trim());
     if (!useDemo && !usesSessionKey) await assertSharedAIKeyAccess();
     let result: unknown;

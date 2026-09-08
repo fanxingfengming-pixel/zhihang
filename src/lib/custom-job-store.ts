@@ -57,6 +57,10 @@ export function saveCustomJob(job: Job) {
   return saveCustomJobs([job, ...current.filter((item) => item.id !== job.id)]);
 }
 
+export function removeCustomJob(jobId: string) {
+  return saveCustomJobs(loadCustomJobs().filter((item) => item.id !== jobId));
+}
+
 export function subscribeCustomJobs(onStoreChange: () => void) {
   function handleStorage(event: StorageEvent) {
     if (event.key === CUSTOM_JOB_STORAGE_KEY) onStoreChange();

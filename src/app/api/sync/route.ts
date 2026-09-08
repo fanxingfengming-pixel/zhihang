@@ -75,3 +75,18 @@ export async function PUT(request: Request) {
     return privateJson({ error: "同步失败，请稍后重试。" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    protectMutation(request, "workspace-sync-delete", { limit: 5 });
+    if (!isSupabaseConfigured()) return unavailable();
+    const { supabase, userId } = await authenticatedUserId();
+    if (!userId) return privateJson({ error: "请先登录后再删除云端数据。" }, { status: 401 });
+    const { error } = await supabase.from("user_workspaces").delete().eq("user_id", userId);
+    if (error) return privateJson({ error: "云端数据删除失败，请稍后重试。" }, { status: 500 });
+    return privateJson({ ok: true });
+  } catch (error) {
+    if (error instanceof RequestSecurityError) return requestSecurityError(error);
+    return privateJson({ error: "云端数据删除失败，请稍后重试。" }, { status: 500 });
+  }
+}

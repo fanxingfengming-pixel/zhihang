@@ -51,4 +51,10 @@ describe("Supabase workspace schema", () => {
     expect(syncRoute).toContain('.eq("updated_at", parsed.data.expectedupdatedat)');
     expect(syncRoute).toContain("status: 409");
   });
+
+  it("provides an authenticated route for deleting the current user's cloud snapshot", () => {
+    expect(syncRoute).toContain("export async function delete");
+    expect(syncRoute).toContain('.delete().eq("user_id", userid)');
+    expect(syncRoute).toContain("请先登录后再删除云端数据");
+  });
 });

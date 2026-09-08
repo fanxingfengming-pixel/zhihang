@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, CloudDownload, CloudUpload, Database, LoaderCircle, LogIn, LogOut, ShieldCheck, UserPlus } from "lucide-react";
+import { CheckCircle2, CloudDownload, CloudUpload, Database, LoaderCircle, LogIn, LogOut, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { exportWorkspaceSnapshot, hasLocalWorkspaceBackup, importWorkspaceSnapshot, restoreLocalWorkspaceBackup, type WorkspaceSnapshot } from "@/lib/workspace-sync";
@@ -158,6 +158,23 @@ function ConfiguredCloudSyncPanel() {
     }
   }
 
+  async function deleteCloudData() {
+    if (!window.confirm("这会永久删除当前账号的云端工作区快照，但保留当前浏览器中的数据和账号。是否继续？")) return;
+    setBusy(true);
+    setStatus({ type: "idle", message: "" });
+    try {
+      const response = await fetch("/api/sync", { method: "DELETE" });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "删除失败");
+      setCloudUpdatedAt(null);
+      setStatus({ type: "success", message: "云端工作区快照已删除，本机数据仍然保留。" });
+    } catch (error) {
+      setStatus({ type: "error", message: error instanceof Error ? error.message : "云端数据删除失败" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="cloud-settings-card" id="cloud-sync">
       <header>
@@ -176,6 +193,7 @@ function ConfiguredCloudSyncPanel() {
             <button type="button" className="primary-button" onClick={upload} disabled={busy}><CloudUpload size={16} />上传本机数据</button>
             <button type="button" className="secondary-button" onClick={download} disabled={busy}><CloudDownload size={16} />从云端恢复</button>
             {hasBackup ? <button type="button" className="secondary-button" onClick={restoreBackup} disabled={busy}>撤销上次云端恢复</button> : null}
+            <button type="button" className="danger-button" onClick={() => void deleteCloudData()} disabled={busy}><Trash2 size={15} />删除云端数据</button>
           </div>
           <p className="cloud-safety"><ShieldCheck size={15} />恢复前自动备份当前本机数据；模型 API 密钥不会进入同步快照。</p>
         </div>

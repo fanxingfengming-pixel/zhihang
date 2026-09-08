@@ -74,6 +74,12 @@ export function protectMutation(
   current.count += 1;
 }
 
+export function protectAIDataConsent(request: Request, useDemo: boolean) {
+  if (!useDemo && request.headers.get("x-zhihang-ai-data-consent") !== "granted") {
+    throw new RequestSecurityError("请先到设置页确认真实模型数据发送说明。", 428);
+  }
+}
+
 export async function readJsonWithLimit(request: Request, maxBytes: number): Promise<unknown> {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {

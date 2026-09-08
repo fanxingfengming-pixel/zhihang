@@ -2,6 +2,8 @@
 
 import { CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { useAIDataConsent } from "@/hooks/use-ai-data-consent";
+import { saveAIDataConsent } from "@/lib/ai-data-consent";
 import type { Provider } from "@/lib/ai/client";
 
 export type AISettingsView = {
@@ -26,6 +28,7 @@ export function SettingsPanel({ initial, fallback }: { initial: AISettingsView; 
   const [status, setStatus] = useState<Status>({ type: "idle", message: "" });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const dataConsent = useAIDataConsent();
 
   function changeProvider(provider: Provider) {
     setSettings((current) => ({ ...current, provider, ...providerDefaults[provider], hasApiKey: false }));
@@ -35,6 +38,10 @@ export function SettingsPanel({ initial, fallback }: { initial: AISettingsView; 
 
   async function saveSettings(event?: FormEvent) {
     event?.preventDefault();
+    if (!settings.demoMode && !dataConsent) {
+      setStatus({ type: "error", message: "使用真实模型前，请先确认下方的数据发送说明。" });
+      return false;
+    }
     setSaving(true);
     setStatus({ type: "idle", message: "" });
     try {
@@ -80,6 +87,12 @@ export function SettingsPanel({ initial, fallback }: { initial: AISettingsView; 
     setStatus({ type: "success", message: "本次会话设置已恢复为服务端默认值" });
   }
 
+  function changeDataConsent(accepted: boolean) {
+    if (!saveAIDataConsent(accepted)) {
+      setStatus({ type: "error", message: "浏览器无法保存数据发送选择，请检查存储权限。" });
+    }
+  }
+
   return (
     <div className="settings-layout">
       <aside className="settings-index" aria-label="设置分类">
@@ -108,6 +121,11 @@ export function SettingsPanel({ initial, fallback }: { initial: AISettingsView; 
             <label className="wide"><span>接口密钥</span><div className="secret-field"><KeyRound size={15} /><input name="api-key" type={showKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} disabled={settings.demoMode} placeholder={settings.hasApiKey ? "密钥已配置；留空可继续使用…" : "请输入接口密钥…"} autoComplete="off" spellCheck={false} /><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏接口密钥" : "显示接口密钥"}>{showKey ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
           </div>
           <div className="security-note"><ShieldCheck size={17} /><p><b>密钥不会写入网页源码或浏览器长期存储。</b><span>当前版本仅保存在本地服务的运行内存中，服务重启后需要重新填写；生产部署应改用服务端环境变量或密钥管理服务。</span></p></div>
+        </section>
+
+        <section className="settings-section">
+          <div className="settings-section-title"><span>03</span><div><h3>真实模型数据发送</h3><p>演示模式不会向第三方模型发送材料；真实模式只在你主动执行 Agent 时发送当前任务所需内容。</p></div></div>
+          <label className="consent-row"><input name="ai-data-consent" type="checkbox" checked={dataConsent} onChange={(event) => changeDataConsent(event.target.checked)} /><span><b>我已了解并同意必要数据发送</b><small>简历、Career Profile、JD 或面试回答可能被发送给你选择的 DeepSeek 或通义千问服务。请勿输入与求职任务无关的敏感信息。</small></span></label>
         </section>
 
         {status.message ? <p className={`settings-status ${status.type}`} role="status"><CheckCircle2 size={15} />{status.message}</p> : null}

@@ -5,6 +5,7 @@ import { demoResult } from "@/lib/demo";
 import {
   looksLikePromptLeakage,
   privateJson,
+  protectAIDataConsent,
   protectMutation,
   readJsonWithLimit,
   redactSecrets,
@@ -92,6 +93,18 @@ describe("API 资源与浏览器边界", () => {
     });
     protectMutation(request, "test", { limit: 1 });
     expect(() => protectMutation(request, "test", { limit: 1 })).toThrowError("请求过于频繁，请稍后再试。");
+  });
+
+  it("真实模型请求必须携带明确的数据发送同意", () => {
+    const missing = new Request("https://app.example/api/agents/jd", { method: "POST" });
+    expect(() => protectAIDataConsent(missing, false)).toThrowError("请先到设置页确认真实模型数据发送说明。");
+    expect(() => protectAIDataConsent(missing, true)).not.toThrow();
+
+    const granted = new Request("https://app.example/api/agents/jd", {
+      method: "POST",
+      headers: { "X-Zhihang-AI-Data-Consent": "granted" },
+    });
+    expect(() => protectAIDataConsent(granted, false)).not.toThrow();
   });
 
   it("所有包含求职资料的 JSON 响应都明确禁止缓存", () => {

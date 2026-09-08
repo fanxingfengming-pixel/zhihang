@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { SettingsPanel, type AISettingsView } from "@/components/settings-panel";
 import { CloudSyncPanel } from "@/components/cloud-sync-panel";
+import { DataManagementPanel } from "@/components/data-management-panel";
 import { AppShell, PageHeading } from "@/components/ui/app-shell";
 import { getRuntimeAISettings } from "@/lib/ai/runtime-settings";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -50,6 +51,7 @@ export default async function SettingsPage() {
       <PageHeading eyebrow="系统设置" title="设置" description="集中管理界面偏好与 AI 接口。密钥仅停留在本地服务运行会话中。" />
       <SettingsPanel initial={initial} fallback={fallback} />
       <CloudSyncPanel configured={isSupabaseConfigured()} />
+      <DataManagementPanel />
     </AppShell>
   );
 }

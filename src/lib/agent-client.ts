@@ -1,4 +1,5 @@
 import type { AgentName } from "@/lib/schemas";
+import { hasAIDataConsent } from "@/lib/ai-data-consent";
 
 export type AgentMeta = {
   provider: string;
@@ -17,7 +18,10 @@ type AgentFailure = {
 export async function runAgent<T>(agent: AgentName, input: unknown, context?: unknown): Promise<AgentSuccess<T>> {
   const response = await fetch(`/api/agents/${agent}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Zhihang-AI-Data-Consent": hasAIDataConsent() ? "granted" : "missing",
+    },
     body: JSON.stringify({ input, context }),
   });
   const payload = (await response.json()) as AgentSuccess<T> | AgentFailure;

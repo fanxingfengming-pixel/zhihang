@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -10,11 +10,13 @@ import { useCareerProfile } from "@/hooks/use-career-profile";
 import { useApplications } from "@/hooks/use-applications";
 import { useCustomJobs } from "@/hooks/use-custom-jobs";
 import { useJobAnalysis, useJobAnalysisScores } from "@/hooks/use-job-analysis";
+import { useSavedJobs } from "@/hooks/use-saved-jobs";
 import { runAgent } from "@/lib/agent-client";
 import { saveApplications } from "@/lib/application-store";
-import { saveCustomJob } from "@/lib/custom-job-store";
+import { removeCustomJob, saveCustomJob } from "@/lib/custom-job-store";
 import { runJobAnalysis, saveCachedJobAnalysis, type JobAnalysisResult, type JobAnalysisStage } from "@/lib/job-analysis";
 import type { JDAnalysis, MatchReport } from "@/lib/schemas";
+import { saveSavedJobs } from "@/lib/saved-job-store";
 import { jobs, type Job } from "@/lib/ui-data";
 
 export default function JobsPage() {
@@ -32,7 +34,7 @@ function JobsContent() {
   const params = useSearchParams();
   const initialId = params.get("job");
   const [selectedId, setSelectedId] = useState(initialId || jobs[0].id);
-  const [saved, setSaved] = useState<string[]>([]);
+  const saved = useSavedJobs();
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [location, setLocation] = useState("all");
   const [sort, setSort] = useState("match");
@@ -94,7 +96,15 @@ function JobsContent() {
   }, [profile]);
 
   function toggleSaved(id: string) {
-    setSaved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+    saveSavedJobs(saved.includes(id) ? saved.filter((item) => item !== id) : [...saved, id]);
+  }
+
+  function deleteCustomJob(candidate: Job) {
+    if (!candidate.id.startsWith("custom-")) return;
+    if (!window.confirm(`删除“${candidate.company} · ${candidate.role}”及其本机 JD？已加入投递中心的记录不会删除。`)) return;
+    if (!removeCustomJob(candidate.id)) return;
+    saveSavedJobs(saved.filter((id) => id !== candidate.id));
+    setSelectedId(jobs[0].id);
   }
 
   async function importJD(event: FormEvent<HTMLFormElement>) {
@@ -211,7 +221,7 @@ function JobsContent() {
         {job ? <><article className="jd-panel">
           <div className="jd-heading">
             <div><div className="company-line"><span className="company-mark large">{job.initials}</span><p><small>{analysis?.jd.company || job.company}</small><b>{analysis?.jd.jobTitle || job.role}</b></p></div><div className="job-meta"><span><MapPin size={14} />{job.location}</span><span><BriefcaseBusiness size={14} />{job.salary}</span><span><Clock3 size={14} />{job.posted}</span></div></div>
-            <button className={`bookmark ${saved.includes(job.id) ? "saved" : ""}`} onClick={() => toggleSaved(job.id)} aria-label={saved.includes(job.id) ? "取消收藏岗位" : "收藏岗位"}><Bookmark size={18} fill={saved.includes(job.id) ? "currentColor" : "none"} /></button>
+            <div className="jd-heading-actions">{job.id.startsWith("custom-") ? <button className="bookmark danger" onClick={() => deleteCustomJob(job)} aria-label="删除自定义岗位"><Trash2 size={17} /></button> : null}<button className={`bookmark ${saved.includes(job.id) ? "saved" : ""}`} onClick={() => toggleSaved(job.id)} aria-label={saved.includes(job.id) ? "取消收藏岗位" : "收藏岗位"}><Bookmark size={18} fill={saved.includes(job.id) ? "currentColor" : "none"} /></button></div>
           </div>
           <div className="jd-tags">{(analysis?.jd.keywords.length ? analysis.jd.keywords : job.tags).map((tag) => <span key={tag}>{tag}</span>)}</div>
           <p className="jd-summary">{analysis?.jd.summary || job.summary}</p>

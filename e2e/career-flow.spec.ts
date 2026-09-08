@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -130,4 +131,31 @@ test("账号同步入口在未配置和已配置环境下均可安全打开", as
 
   const response = await page.request.get("/api/sync");
   expect([401, 503]).toContain(response.status());
+});
+
+test("真实模型需明确同意，岗位收藏和完整备份可持久化", async ({ page }) => {
+  await page.goto("/settings");
+  const demoToggle = page.getByRole("checkbox", { name: "使用演示模式" });
+  if (await demoToggle.isChecked()) await demoToggle.uncheck();
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await expect(page.getByRole("status")).toContainText("请先确认");
+
+  await page.getByRole("checkbox", { name: "我已了解并同意必要数据发送" }).check();
+  await page.getByRole("button", { name: "保存设置" }).click();
+  await expect(page.getByRole("status")).toContainText("API 设置已保存");
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载完整备份" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^zhihang-backup-\d{4}-\d{2}-\d{2}\.json$/);
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  const backup = JSON.parse(await readFile(downloadPath!, "utf8")) as Record<string, unknown>;
+  expect(backup).toMatchObject({ version: 1, customJobs: [], offerDrafts: [], savedJobIds: [] });
+  expect(JSON.stringify(backup)).not.toContain("apiKey");
+
+  await page.goto("/jobs");
+  await page.getByRole("button", { name: "收藏岗位" }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "取消收藏岗位" })).toBeVisible();
 });

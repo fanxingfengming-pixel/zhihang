@@ -4,7 +4,7 @@ import { readLocalStorageItem, writeLocalStorageItem } from "@/lib/browser-stora
 
 export const OFFER_DRAFT_STORAGE_KEY = "zhihang-offer-drafts:v1";
 export const OFFER_DRAFT_EVENT = "zhihang-offer-drafts-change";
-const OfferDraftListSchema = z.array(OfferCandidateSchema).max(10);
+export const OfferDraftListSchema = z.array(OfferCandidateSchema).max(10);
 
 export function getOfferDraftsSnapshot() {
   return readLocalStorageItem(OFFER_DRAFT_STORAGE_KEY);
