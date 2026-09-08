@@ -1,4 +1,4 @@
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { demoResult } from "@/lib/demo";
 import {
   ApplicationManagementSchema,
@@ -46,5 +46,16 @@ describe("10 个 Agent 的演示输出契约", () => {
     GrowthPlanSchema.parse(demoResult("plan", { profile }, { career, gap }));
     ApplicationManagementSchema.parse(demoResult("application", { applications: [{ id: "a1", company: "示例公司", role: "实习生", jobId: "", stage: "applied", nextAction: "准备面试", deadline: "", notes: "", updatedAt: "2026-09-07" }] }, { profile }));
     OfferDecisionSchema.parse(demoResult("offer", { offers: [{ id: "o1", company: "A", role: "实习生", location: "杭州", monthlySalary: 8000, salaryMonths: 12, bonus: 0, growth: "", workLife: "", notes: "" }, { id: "o2", company: "B", role: "实习生", location: "上海", monthlySalary: 7000, salaryMonths: 13, bonus: 0, growth: "", workLife: "", notes: "" }] }, { profile }));
+  });
+
+  it("兼容 Qwen 将简历修改前后内容返回为字符串数组", () => {
+    const candidate = demoResult("optimize", { profile }, { jd, match }) as Record<string, unknown>;
+    const changes = candidate.changes as Array<Record<string, unknown>>;
+    changes[0] = { ...changes[0], before: ["完成学生访谈", "完成原型设计"], after: ["完成学生访谈", "交付原型设计"] };
+
+    const parsed = ResumeOptimizationSchema.parse(candidate);
+
+    expect(parsed.changes[0].before).toBe("完成学生访谈\n完成原型设计");
+    expect(parsed.changes[0].after).toBe("完成学生访谈\n交付原型设计");
   });
 });

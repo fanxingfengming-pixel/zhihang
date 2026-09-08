@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+const ModelTextSchema = z.preprocess(
+  (value) => Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value.join("\n")
+    : value,
+  z.string(),
+);
+
 export const ExperienceSchema = z.object({
   title: z.string(),
   organization: z.string(),
@@ -68,8 +75,8 @@ export const ResumeOptimizationSchema = z.object({
   summary: z.string(),
   changes: z.array(z.object({
     section: z.string(),
-    before: z.string(),
-    after: z.string(),
+    before: ModelTextSchema,
+    after: ModelTextSchema,
     reason: z.string(),
     evidence: z.array(z.string()),
   })),
