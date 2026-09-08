@@ -39,7 +39,7 @@
 
 ## 本地启动
 
-需要 Node.js 20.9 或更高版本。
+需要 Node.js 22 或更高版本。推荐使用当前 Node.js LTS；项目的 CI 固定使用 Node.js 22 验证最低支持版本。
 
 ```bash
 pnpm install
