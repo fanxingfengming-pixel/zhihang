@@ -4,13 +4,18 @@
 
 ## 已实现的控制
 
-- DeepSeek 与 Qwen API 密钥仅保存在服务端内存或服务端环境变量，不进入浏览器存储、Prompt、Career Profile 或 Supabase 快照。
+- DeepSeek、Qwen 与 Supabase Secret Key 仅保存在服务端内存或服务端环境变量，不进入浏览器存储、Prompt、Career Profile 或 Supabase 快照。
 - 设置页只接受 DeepSeek 与阿里云 DashScope 官方 HTTPS 地址，避免把密钥转发到任意服务。
 - 简历、JD、用户输入和上下文均被标记为不可信数据；嵌入其中的指令不能覆盖 Agent 系统规则。
 - 模型输出先经过 JSON 解析、Zod Schema、Agent 事实守卫和凭据脱敏，再返回页面。
 - Agent、设置、简历上传和云同步接口限制请求大小与频率，并拒绝跨站写请求。
 - 所有包含求职资料的 API JSON 响应使用 `private, no-store`，页面使用防嵌入与基础 CSP 安全响应头。
+- PDF / DOCX 简历在同源服务端内存中即时生成，响应禁止缓存；导出不会调用大模型、写入数据库或上传到第三方。
 - Supabase 工作区使用显式权限与 RLS，只允许登录用户访问自己的记录。
+- 实时岗位缓存表启用并强制执行 RLS，撤销匿名与普通登录角色的直连权限，只允许服务端 Secret Key 访问；公开 API 只返回规范化后的岗位字段。
+- 招聘来源仅使用公开 JSON API，所有 HTML 描述都会转为纯文本，外链必须是无账号信息的 HTTPS 地址。
+- 生产环境的共享模型密钥使用模型白名单，并通过 Supabase 原子计数实施每账号每分钟 10 次、每天 50 次的分布式配额。
+- 服务端日志只记录请求编号、Agent、模型、耗时、运行模式和 Token 用量，不记录简历、JD、回答或 API 密钥正文。
 
 ## 使用者须知
 
@@ -21,4 +26,4 @@
 
 ## 当前限制
 
-进程内限流适合 MVP 和单实例部署；多实例生产环境应接入共享限流存储与监控告警。Supabase pgTAP 策略测试需要在安装 Supabase CLI 与 Docker 后运行。
+一般接口仍使用进程内限流，适合 MVP；共享模型费用路径已改为 Supabase 分布式配额。正式公开前仍应在部署平台配置成本告警、日志保留策略、自定义 SMTP、CAPTCHA，并定期检查 Supabase Security Advisor。Supabase pgTAP 策略测试需要在安装 Supabase CLI 与 Docker 后运行，仓库也会在 GitHub Actions 中自动执行。

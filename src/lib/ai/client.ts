@@ -1,4 +1,5 @@
 export type Provider = "deepseek" | "qwen";
+export const DEFAULT_PROVIDER: Provider = "qwen";
 
 export type ProviderOverrides = {
   apiKey?: string;
@@ -6,9 +7,42 @@ export type ProviderOverrides = {
   model?: string;
 };
 
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const DEFAULT_MODELS: Record<Provider, string> = {
+  deepseek: "deepseek-v4-flash",
+  qwen: "qwen-plus",
+};
+
+function configuredModel(provider: Provider) {
+  return provider === "qwen"
+    ? process.env.QWEN_MODEL || DEFAULT_MODELS.qwen
+    : process.env.DEEPSEEK_MODEL || DEFAULT_MODELS.deepseek;
+}
+
+export function allowedSharedModels(provider: Provider) {
+  const configured = provider === "qwen"
+    ? process.env.QWEN_SHARED_MODELS
+    : process.env.DEEPSEEK_SHARED_MODELS;
+  const models = configured?.split(",").map((model) => model.trim()).filter(Boolean);
+  return new Set(models?.length ? models : [configuredModel(provider)]);
+}
+
+export function isAllowedSharedModel(provider: Provider, model: string) {
+  return allowedSharedModels(provider).has(model.trim());
+}
+
 type CompletionPayload = {
   choices?: Array<{ message?: { content?: string | null } }>;
   error?: { message?: string };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 };
 
 function providerConfig(provider: Provider, overrides?: ProviderOverrides) {
@@ -16,14 +50,14 @@ function providerConfig(provider: Provider, overrides?: ProviderOverrides) {
     return {
       apiKey: overrides?.apiKey || process.env.QWEN_API_KEY,
       baseUrl: overrides?.baseUrl || process.env.QWEN_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      model: overrides?.model || process.env.QWEN_MODEL || "qwen-plus",
+      model: overrides?.model || configuredModel("qwen"),
     };
   }
 
   return {
     apiKey: overrides?.apiKey || process.env.DEEPSEEK_API_KEY,
     baseUrl: overrides?.baseUrl || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-    model: overrides?.model || process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+    model: overrides?.model || configuredModel("deepseek"),
   };
 }
 
@@ -42,7 +76,7 @@ export function isAllowedProviderBaseUrl(provider: Provider, value: string) {
   }
 }
 
-export async function generateJson(provider: Provider, system: string, user: string, overrides?: ProviderOverrides) {
+export async function generateJsonWithMetrics(provider: Provider, system: string, user: string, overrides?: ProviderOverrides) {
   const config = providerConfig(provider, overrides);
   if (!config.apiKey) throw new Error(`尚未配置 ${provider === "qwen" ? "QWEN" : "DEEPSEEK"}_API_KEY`);
 
@@ -74,7 +108,47 @@ export async function generateJson(provider: Provider, system: string, user: str
 
   const content = payload.choices?.[0]?.message?.content;
   if (!content) throw new Error("模型没有返回可解析的内容");
-  return content;
+  return { content, usage: payload.usage };
+}
+
+export async function generateJson(provider: Provider, system: string, user: string, overrides?: ProviderOverrides) {
+  return (await generateJsonWithMetrics(provider, system, user, overrides)).content;
+}
+
+export async function generateTextWithMetrics(
+  provider: Provider,
+  system: string,
+  messages: ChatMessage[],
+  overrides?: ProviderOverrides,
+) {
+  const config = providerConfig(provider, overrides);
+  if (!config.apiKey) throw new Error(`尚未配置 ${provider === "qwen" ? "QWEN" : "DEEPSEEK"}_API_KEY`);
+
+  const endpoint = `${config.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const providerOptions = provider === "deepseek" ? { thinking: { type: "disabled" } } : {};
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [{ role: "system", content: system }, ...messages],
+      temperature: 0.35,
+      max_tokens: 900,
+      stream: false,
+      ...providerOptions,
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  const payload = (await response.json()) as CompletionPayload;
+  if (!response.ok) throw new Error(payload.error?.message || `模型请求失败（HTTP ${response.status}）`);
+
+  const content = payload.choices?.[0]?.message?.content?.trim();
+  if (!content) throw new Error("模型没有返回可用内容");
+  return { content, usage: payload.usage };
 }
 
 export async function testProviderConnection(provider: Provider, overrides?: ProviderOverrides) {

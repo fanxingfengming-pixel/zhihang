@@ -228,6 +228,19 @@ export const AgentRequestSchema = z.object({
   context: z.unknown().optional(),
 });
 
+export const FreeChatMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(2_000),
+});
+
+export const FreeChatRequestSchema = z.object({
+  messages: z.array(FreeChatMessageSchema).min(1).max(12),
+}).superRefine((value, context) => {
+  if (value.messages.at(-1)?.role !== "user") {
+    context.addIssue({ code: "custom", path: ["messages"], message: "最后一条消息必须来自用户" });
+  }
+});
+
 export type Experience = z.infer<typeof ExperienceSchema>;
 export type CareerProfile = z.infer<typeof CareerProfileSchema>;
 export type JDAnalysis = z.infer<typeof JDAnalysisSchema>;
@@ -245,6 +258,8 @@ export type ApplicationRecord = z.infer<typeof ApplicationRecordSchema>;
 export type ApplicationManagement = z.infer<typeof ApplicationManagementSchema>;
 export type OfferCandidate = z.infer<typeof OfferCandidateSchema>;
 export type OfferDecision = z.infer<typeof OfferDecisionSchema>;
+export type FreeChatMessage = z.infer<typeof FreeChatMessageSchema>;
+export type FreeChatRequest = z.infer<typeof FreeChatRequestSchema>;
 export type AgentName = "resume" | "jd" | "match" | "optimize" | "interview" | "career" | "gap" | "plan" | "application" | "offer";
 
 export const EMPTY_PROFILE: CareerProfile = {

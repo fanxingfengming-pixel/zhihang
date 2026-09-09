@@ -98,6 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Sparkles size={16} />
           <p><b>一步一步，靠近理想 Offer。</b><span>每一次完善都会留下成长的刻度。</span></p>
         </div>
+        <div className="sidebar-legal"><Link href="/privacy">隐私</Link><span>·</span><Link href="/terms">条款</Link></div>
         <div className="sidebar-user">
           <span className="avatar">{profile.basics.name.trim().slice(0, 1) || "职"}</span>
           <p><b>{profile.basics.name || "职航同学"}</b><small>{[profile.basics.school, profile.basics.grade].filter(Boolean).join(" · ") || "求职档案待完善"}</small></p>

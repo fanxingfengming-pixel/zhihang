@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Bookmark, BriefcaseBusiness, Check, ClipboardCheck, Clock3, ExternalLink, MapPin, Mic2, Plus, RefreshCw, Search, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { AppShell, PageHeading, ProgressLine } from "@/components/ui/app-shell";
 import { AgentTrace, type AgentTraceStep } from "@/components/ui/agent-trace";
 import { useCareerProfile } from "@/hooks/use-career-profile";
@@ -15,6 +15,8 @@ import { runAgent } from "@/lib/agent-client";
 import { saveApplications } from "@/lib/application-store";
 import { removeCustomJob, saveCustomJob } from "@/lib/custom-job-store";
 import { runJobAnalysis, saveCachedJobAnalysis, type JobAnalysisResult, type JobAnalysisStage } from "@/lib/job-analysis";
+import { liveJobToUiJob } from "@/lib/jobs/client";
+import type { LiveJobsPayload } from "@/lib/jobs/types";
 import type { JDAnalysis, MatchReport } from "@/lib/schemas";
 import { saveSavedJobs } from "@/lib/saved-job-store";
 import { jobs, type Job } from "@/lib/ui-data";
@@ -50,8 +52,43 @@ function JobsContent() {
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [transientAnalyses, setTransientAnalyses] = useState<Record<string, JobAnalysisResult>>({});
+  const [livePayload, setLivePayload] = useState<LiveJobsPayload | null>(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveError, setLiveError] = useState("");
 
-  const allJobs = useMemo(() => [...customJobs, ...jobs], [customJobs]);
+  const loadLiveJobs = useCallback(async (signal?: AbortSignal) => {
+    setLiveLoading(true);
+    setLiveError("");
+    try {
+      const response = await fetch("/api/jobs?limit=120", { signal });
+      const payload = await response.json() as LiveJobsPayload & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "实时岗位暂时不可用");
+      setLivePayload(payload);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setLiveError(error instanceof Error ? error.message : "实时岗位暂时不可用");
+    } finally {
+      if (!signal?.aborted) setLiveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadLiveJobs(controller.signal);
+    return () => controller.abort();
+  }, [loadLiveJobs]);
+
+  const liveJobs = useMemo(() => livePayload?.jobs.map(liveJobToUiJob) ?? [], [livePayload]);
+
+  useEffect(() => {
+    if (!initialId && selectedId === jobs[0].id && liveJobs[0]) setSelectedId(liveJobs[0].id);
+  }, [initialId, liveJobs, selectedId]);
+
+  const allJobs = useMemo(() => {
+    const byId = new Map<string, Job>();
+    for (const item of [...customJobs, ...liveJobs, ...jobs]) byId.set(item.id, item);
+    return [...byId.values()];
+  }, [customJobs, liveJobs]);
   const cachedAnalysisScores = useJobAnalysisScores(allJobs.map((item) => item.id), profile.updatedAt);
   const analysisScores = useMemo(() => {
     const scores = { ...cachedAnalysisScores };
@@ -64,7 +101,7 @@ function JobsContent() {
     const normalized = query.trim().toLowerCase();
     const filtered = allJobs.filter((item) => {
       const matchesQuery = !normalized || [item.company, item.role, ...item.tags].join(" ").toLowerCase().includes(normalized);
-      const matchesLocation = location === "all" || (location === "hzsh" && /杭州|上海/.test(item.location)) || (location === "sz" && item.location.includes("深圳"));
+      const matchesLocation = location === "all" || (location === "hzsh" && /杭州|上海/.test(item.location)) || (location === "sz" && item.location.includes("深圳")) || (location === "remote" && /远程|remote/i.test(item.location));
       return matchesQuery && matchesLocation;
     });
     const currentScore = (jobId: string) => analysisScores[jobId] ?? -1;
@@ -180,7 +217,7 @@ function JobsContent() {
       stage: "interested",
       nextAction: "核对岗位要求并准备定向材料",
       deadline: "",
-      notes: candidate.id.startsWith("custom-") ? "来自手动粘贴的 JD" : "来自岗位匹配页面",
+      notes: candidate.id.startsWith("custom-") ? "来自手动粘贴的 JD" : candidate.isLive ? `来自 ${candidate.sourceLabel || "官方公开源"} 的实时岗位` : "来自岗位匹配页面",
       updatedAt: new Date().toISOString(),
     }]);
     if (!savedSuccessfully) return;
@@ -194,14 +231,19 @@ function JobsContent() {
 
   return (
     <AppShell>
-      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="选择预置岗位，或粘贴你找到的真实 JD；只有点击分析后才会调用模型。" action={<div className="jobs-heading-actions"><button className="secondary-button" onClick={() => setJdDialogOpen(true)}><Plus size={15} />粘贴真实 JD</button><button className="secondary-button" onClick={() => job && void analyze(job, Boolean(analysis))} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : analysis ? "重新分析当前岗位" : "分析当前岗位"}</button></div>} />
+      <PageHeading eyebrow="OPPORTUNITY MATCH" title="发现适合你的岗位" description="浏览企业官方公开岗位，或粘贴你找到的真实 JD；只有点击分析后才会调用模型。" action={<div className="jobs-heading-actions"><button className="secondary-button" onClick={() => setJdDialogOpen(true)}><Plus size={15} />粘贴真实 JD</button><button className="secondary-button" onClick={() => job && void analyze(job, Boolean(analysis))} disabled={!job || analyzing}><RefreshCw size={15} className={analyzing ? "spin" : ""} />{analyzing ? "正在分析…" : analysis ? "重新分析当前岗位" : "分析当前岗位"}</button></div>} />
+      <div className={`live-jobs-status ${liveError ? "error" : ""}`} role="status">
+        <span className="live-status-dot" />
+        {liveLoading ? "正在同步企业官方岗位…" : liveError ? `实时岗位加载失败，当前显示演示与自定义岗位：${liveError}` : `已同步 ${liveJobs.length} 个公开岗位${livePayload?.cached ? "（缓存）" : ""}`}
+        {!liveLoading && liveError ? <button type="button" onClick={() => void loadLiveJobs()}><RefreshCw size={13} />重试</button> : null}
+      </div>
       {analysis ? <p className="page-feedback" role="status"><Sparkles size={13} />已由{analysis.meta.demo ? "演示引擎" : analysis.meta.provider}完成 JD 解析与匹配分析</p> : null}
       {job && addedJobId === job.id ? <p className="page-feedback" role="status"><Check size={13} />已加入投递中心，可继续记录准备、投递和面试进度</p> : null}
       <section className="jobs-workbench">
         <aside className="job-list-panel">
           <div className="job-search"><Search size={16} aria-hidden="true" /><input name="job-search" aria-label="搜索岗位" value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" placeholder="公司、岗位或技能…" /></div>
           <div className="job-filters">
-            <select aria-label="筛选城市" value={location} onChange={(event) => setLocation(event.target.value)}><option value="all">全部城市</option><option value="hzsh">杭州 / 上海</option><option value="sz">深圳</option></select>
+            <select aria-label="筛选城市" value={location} onChange={(event) => setLocation(event.target.value)}><option value="all">全部城市</option><option value="hzsh">杭州 / 上海</option><option value="sz">深圳</option><option value="remote">远程</option></select>
             <select aria-label="排序方式" value={sort} onChange={(event) => setSort(event.target.value)}><option value="match">匹配度优先</option><option value="latest">最近更新</option></select>
           </div>
           <p className="list-count"><span>推荐岗位</span><b>{visibleJobs.length} RESULTS</b></p>
@@ -210,7 +252,7 @@ function JobsContent() {
               const score = analysisScores[item.id];
               return <button key={item.id} className={job?.id === item.id ? "selected" : ""} onClick={() => setSelectedId(item.id)}>
                 <span className="company-mark">{item.initials}</span>
-                <div><h3>{item.company}</h3><p>{item.role}</p><small><MapPin size={12} />{item.location}</small></div>
+                <div><h3>{item.company}{item.isLive ? <em className="live-job-badge">实时</em> : null}</h3><p>{item.role}</p><small><MapPin size={12} />{item.location}</small></div>
                 <strong>{score === undefined ? "—" : `${score}%`}</strong>
               </button>;
             })}
@@ -225,8 +267,9 @@ function JobsContent() {
           </div>
           <div className="jd-tags">{(analysis?.jd.keywords.length ? analysis.jd.keywords : job.tags).map((tag) => <span key={tag}>{tag}</span>)}</div>
           <p className="jd-summary">{analysis?.jd.summary || job.summary}</p>
+          {job.isLive && job.sourceUrl ? <div className="live-job-source"><div><span className="live-status-dot" /><p><b>{job.sourceLabel || "企业官方公开源"}</b><small>岗位信息来自公开招聘接口，请在申请前核对原页面。</small></p></div><a href={job.sourceUrl} target="_blank" rel="noreferrer">查看原职位 <ExternalLink size={14} /></a></div> : null}
           <div className="jd-section"><h3>岗位职责</h3><ol>{(analysis?.jd.responsibilities.length ? analysis.jd.responsibilities : job.responsibilities).map((item, index) => <li key={`${item}-${index}`}><span>0{index + 1}</span>{item}</li>)}</ol></div>
-          <div className="jd-section"><h3>任职要求</h3><ol>{(analysis ? [...analysis.jd.requiredSkills, ...analysis.jd.preferredSkills] : job.requirements).map((item, index) => <li key={`${item}-${index}`}><span>0{index + 1}</span>{item}</li>)}</ol></div>
+          <div className="jd-section"><h3>任职要求</h3>{(analysis ? [...analysis.jd.requiredSkills, ...analysis.jd.preferredSkills] : job.requirements).length ? <ol>{(analysis ? [...analysis.jd.requiredSkills, ...analysis.jd.preferredSkills] : job.requirements).map((item, index) => <li key={`${item}-${index}`}><span>0{index + 1}</span>{item}</li>)}</ol> : <p className="jd-source-hint">公开源未单独拆分任职要求，点击“分析当前岗位”可由 JD 解析 Agent 提取。</p>}</div>
         </article>
 
         <aside className="match-panel">
@@ -246,6 +289,7 @@ function JobsContent() {
             <div className="match-insights positive"><h3><Check size={15} />你的优势</h3>{(analysis.match.matchedSkills.length ? analysis.match.matchedSkills : analysis.match.evidence).map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div>
             <div className="match-insights gap"><h3><TriangleAlert size={15} />仍有差距</h3>{analysis.match.gaps.map((item, index) => <p key={`${item}-${index}`}>{item}</p>)}</div>
             <button className="secondary-button full application-entry-button" onClick={() => addToApplications(job)}><ClipboardCheck size={15} />{addedJobId === job.id ? "已加入投递中心" : "加入投递中心"}</button>
+            {job.isLive && job.applyUrl ? <a className="secondary-button full live-apply-link" href={job.applyUrl} target="_blank" rel="noreferrer">前往官方页面申请 <ExternalLink size={15} /></a> : null}
             <Link className="primary-button full" href={`/workspace?job=${job.id}`}>针对该岗位优化简历 <ArrowRight size={16} /></Link>
             <Link className="interview-entry-link" href={`/interview?job=${job.id}`}><Mic2 size={15} />开始岗位模拟面试 <ArrowRight size={14} /></Link>
             <small className="match-note">匹配度用于发现优势与差距，不代表录用概率。</small>

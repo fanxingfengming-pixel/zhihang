@@ -79,18 +79,27 @@ function ConfiguredCloudSyncPanel() {
   }, [currentEmail]);
 
   async function authenticate(mode: "signin" | "signup") {
-    if (!email.trim() || password.length < 6) {
-      setStatus({ type: "error", message: "请输入有效邮箱，密码至少 6 位。" });
+    if (!email.trim() || password.length < 8) {
+      setStatus({ type: "error", message: "请输入有效邮箱，密码至少 8 位。" });
       return;
     }
     setBusy(true);
     setStatus({ type: "idle", message: "" });
     const result = mode === "signup"
-      ? await supabase.auth.signUp({ email: email.trim(), password })
+      ? await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/settings` },
+      })
       : await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
     if (result.error) {
-      setStatus({ type: "error", message: result.error.message });
+      const message = /invalid login credentials/i.test(result.error.message)
+        ? "邮箱或密码不正确。"
+        : /email not confirmed/i.test(result.error.message)
+          ? "请先打开验证邮件完成邮箱确认。"
+          : "账号操作失败，请稍后重试。";
+      setStatus({ type: "error", message });
       return;
     }
     setPassword("");
@@ -98,6 +107,36 @@ function ConfiguredCloudSyncPanel() {
       type: "success",
       message: result.data.session ? "登录成功，可以开始同步。" : "注册成功，请先到邮箱完成验证。",
     });
+  }
+
+  async function requestPasswordReset() {
+    if (!email.trim()) {
+      setStatus({ type: "error", message: "请先填写需要找回密码的邮箱。" });
+      return;
+    }
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/confirm?next=/auth/update-password`,
+    });
+    setBusy(false);
+    setStatus(error
+      ? { type: "error", message: "密码重置邮件发送失败，请稍后重试。" }
+      : { type: "success", message: "如果该邮箱已注册，重置邮件会很快发送。" });
+  }
+
+  async function deleteAccount() {
+    if (!window.confirm("确定永久删除账号和全部云端数据吗？此操作无法撤销，本机数据不会自动删除。")) return;
+    setBusy(true);
+    const response = await fetch("/api/account", { method: "DELETE" });
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      setBusy(false);
+      setStatus({ type: "error", message: payload.error || "账号删除失败" });
+      return;
+    }
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    setBusy(false);
+    setStatus({ type: "success", message: "账号和云端数据已永久删除，本机数据仍然保留。" });
   }
 
   async function signOut() {
@@ -194,16 +233,18 @@ function ConfiguredCloudSyncPanel() {
             <button type="button" className="secondary-button" onClick={download} disabled={busy}><CloudDownload size={16} />从云端恢复</button>
             {hasBackup ? <button type="button" className="secondary-button" onClick={restoreBackup} disabled={busy}>撤销上次云端恢复</button> : null}
             <button type="button" className="danger-button" onClick={() => void deleteCloudData()} disabled={busy}><Trash2 size={15} />删除云端数据</button>
+            <button type="button" className="danger-button" onClick={() => void deleteAccount()} disabled={busy}><Trash2 size={15} />永久删除账号</button>
           </div>
           <p className="cloud-safety"><ShieldCheck size={15} />恢复前自动备份当前本机数据；模型 API 密钥不会进入同步快照。</p>
         </div>
       ) : (
         <form className="cloud-login-form" onSubmit={(event: FormEvent) => { event.preventDefault(); void authenticate("signin"); }}>
           <label><span>邮箱</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" spellCheck={false} placeholder="name@example.com" /></label>
-          <label><span>密码</span><input name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" placeholder="至少 6 位…" /></label>
+          <label><span>密码</span><input name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" minLength={8} placeholder="至少 8 位…" /></label>
           <div>
             <button type="submit" className="primary-button" disabled={busy}><LogIn size={15} />登录</button>
             <button type="button" className="secondary-button" disabled={busy} onClick={() => authenticate("signup")}><UserPlus size={15} />注册</button>
+            <button type="button" className="text-button compact" disabled={busy} onClick={() => void requestPasswordReset()}>忘记密码</button>
           </div>
         </form>
       )}

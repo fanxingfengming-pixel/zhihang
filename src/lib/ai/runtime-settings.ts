@@ -17,6 +17,10 @@ const settingsStore = globalStore.__zhihangAISettings
 globalStore.__zhihangAISettings = settingsStore;
 const MAX_RUNTIME_SETTINGS = 1_000;
 
+export function runtimeApiKeysAllowed() {
+  return process.env.NODE_ENV !== "production" || process.env.ALLOW_RUNTIME_API_KEYS === "true";
+}
+
 function pruneRuntimeAISettings(now = Date.now()) {
   for (const [sessionId, entry] of settingsStore) {
     if (entry.expiresAt <= now) settingsStore.delete(sessionId);

@@ -1,3 +1,5 @@
+import type { JobSource } from "@/lib/jobs/types";
+
 export type Job = {
   id: string;
   company: string;
@@ -16,6 +18,14 @@ export type Job = {
   scores: { label: string; value: number }[];
   strengths: string[];
   gaps: string[];
+  source?: JobSource;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  applyUrl?: string;
+  employmentType?: string;
+  publishedAt?: string | null;
+  fetchedAt?: string;
+  isLive?: boolean;
 };
 
 export const jobs: Job[] = [

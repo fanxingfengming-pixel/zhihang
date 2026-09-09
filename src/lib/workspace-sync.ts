@@ -27,6 +27,9 @@ import {
   saveCareerProfile,
 } from "@/lib/career-profile-store";
 import { readLocalStorageItem, removeLocalStorageItem, writeLocalStorageItem } from "@/lib/browser-storage";
+import { CustomJobListSchema, loadCustomJobs, saveCustomJobs } from "@/lib/custom-job-store";
+import { getOfferDraftsSnapshot, OfferDraftListSchema, parseOfferDraftsSnapshot, saveOfferDrafts } from "@/lib/offer-draft-store";
+import { getSavedJobsSnapshot, parseSavedJobsSnapshot, SavedJobListSchema, saveSavedJobs } from "@/lib/saved-job-store";
 
 export const WorkspaceSnapshotSchema = z.object({
   version: z.literal(1),
@@ -36,6 +39,9 @@ export const WorkspaceSnapshotSchema = z.object({
   careerIntelligence: CareerIntelligenceRecordSchema.nullable(),
   interviewHistory: z.array(InterviewPracticeRecordSchema),
   offerHistory: z.array(OfferComparisonRecordSchema),
+  customJobs: CustomJobListSchema.default([]),
+  offerDrafts: OfferDraftListSchema.default([]),
+  savedJobIds: SavedJobListSchema.default([]),
 });
 
 export type WorkspaceSnapshot = z.infer<typeof WorkspaceSnapshotSchema>;
@@ -51,6 +57,9 @@ export function exportWorkspaceSnapshot(): WorkspaceSnapshot {
     careerIntelligence: parseCareerIntelligence(getCareerIntelligenceSnapshot()),
     interviewHistory: parseInterviewHistory(getInterviewHistorySnapshot()),
     offerHistory: parseOfferHistory(getOfferHistorySnapshot()),
+    customJobs: loadCustomJobs(),
+    offerDrafts: parseOfferDraftsSnapshot(getOfferDraftsSnapshot()),
+    savedJobIds: parseSavedJobsSnapshot(getSavedJobsSnapshot()),
   };
 }
 
@@ -61,6 +70,9 @@ function applyWorkspaceSnapshot(snapshot: WorkspaceSnapshot) {
     snapshot.careerIntelligence ? saveCareerIntelligence(snapshot.careerIntelligence) : clearCareerIntelligence(),
     saveInterviewHistory(snapshot.interviewHistory),
     saveOfferHistory(snapshot.offerHistory),
+    saveCustomJobs(snapshot.customJobs),
+    saveOfferDrafts(snapshot.offerDrafts),
+    saveSavedJobs(snapshot.savedJobIds),
   ];
   if (writes.some((saved) => !saved)) throw new Error("浏览器存储空间不足，工作区未能完整恢复。");
 }

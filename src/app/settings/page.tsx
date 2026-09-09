@@ -3,9 +3,9 @@ import { SettingsPanel, type AISettingsView } from "@/components/settings-panel"
 import { CloudSyncPanel } from "@/components/cloud-sync-panel";
 import { DataManagementPanel } from "@/components/data-management-panel";
 import { AppShell, PageHeading } from "@/components/ui/app-shell";
-import { getRuntimeAISettings } from "@/lib/ai/runtime-settings";
+import { getRuntimeAISettings, runtimeApiKeysAllowed } from "@/lib/ai/runtime-settings";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import type { Provider } from "@/lib/ai/client";
+import { DEFAULT_PROVIDER, type Provider } from "@/lib/ai/client";
 
 export const dynamic = "force-dynamic";
 
@@ -27,16 +27,17 @@ function environmentDefaults(provider: Provider) {
 export default async function SettingsPage() {
   const sessionId = (await cookies()).get("zhihang_ai_session")?.value;
   const runtimeSettings = getRuntimeAISettings(sessionId);
-  const environmentProvider = process.env.AI_PROVIDER === "qwen" ? "qwen" : "deepseek";
+  const environmentProvider = process.env.AI_PROVIDER === "deepseek" ? "deepseek" : DEFAULT_PROVIDER;
   const provider = runtimeSettings?.provider || environmentProvider;
   const defaults = environmentDefaults(provider);
   const environment = environmentDefaults(environmentProvider);
+  const allowRuntimeApiKeys = runtimeApiKeysAllowed();
   const initial: AISettingsView = {
     provider,
     baseUrl: runtimeSettings?.baseUrl || defaults.baseUrl,
     model: runtimeSettings?.model || defaults.model,
     demoMode: runtimeSettings?.demoMode ?? process.env.DEMO_MODE === "true",
-    hasApiKey: Boolean(runtimeSettings?.apiKey || defaults.hasApiKey),
+    hasApiKey: Boolean((allowRuntimeApiKeys && runtimeSettings?.apiKey) || defaults.hasApiKey),
   };
   const fallback: AISettingsView = {
     provider: environmentProvider,
@@ -49,7 +50,7 @@ export default async function SettingsPage() {
   return (
     <AppShell>
       <PageHeading eyebrow="系统设置" title="设置" description="集中管理界面偏好与 AI 接口。密钥仅停留在本地服务运行会话中。" />
-      <SettingsPanel initial={initial} fallback={fallback} />
+      <SettingsPanel initial={initial} fallback={fallback} allowRuntimeApiKeys={allowRuntimeApiKeys} />
       <CloudSyncPanel configured={isSupabaseConfigured()} />
       <DataManagementPanel />
     </AppShell>

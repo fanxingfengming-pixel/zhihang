@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { isAllowedProviderBaseUrl } from "@/lib/ai/client";
-import { clearRuntimeAISettings, getRuntimeAISettings, saveRuntimeAISettings } from "@/lib/ai/runtime-settings";
+import { isAllowedProviderBaseUrl, isAllowedSharedModel } from "@/lib/ai/client";
+import { clearRuntimeAISettings, getRuntimeAISettings, runtimeApiKeysAllowed, saveRuntimeAISettings } from "@/lib/ai/runtime-settings";
 import { privateJson, protectMutation, readJsonWithLimit, RequestSecurityError, requestSecurityError } from "@/lib/request-security";
 
 export const runtime = "nodejs";
@@ -33,9 +33,16 @@ export async function POST(request: Request) {
     const currentSessionId = cookieStore.get("zhihang_ai_session")?.value;
     const sessionId = currentSessionId || randomUUID();
     const current = getRuntimeAISettings(currentSessionId);
+    if (input.apiKey && !runtimeApiKeysAllowed()) {
+      throw new RequestSecurityError("生产环境不接受网页临时密钥，请由管理员配置服务端环境变量。", 403);
+    }
+    const effectiveApiKey = input.apiKey || (runtimeApiKeysAllowed() ? current?.apiKey : "") || "";
+    if (!input.demoMode && !effectiveApiKey && !isAllowedSharedModel(input.provider, input.model)) {
+      throw new RequestSecurityError("平台共享密钥不支持该模型，请选择管理员允许的模型。", 400);
+    }
     saveRuntimeAISettings(sessionId, {
       ...input,
-      apiKey: input.apiKey || current?.apiKey || "",
+      apiKey: effectiveApiKey,
     });
     cookieStore.set("zhihang_ai_session", sessionId, {
       httpOnly: true,
@@ -44,7 +51,7 @@ export async function POST(request: Request) {
       path: "/",
       maxAge: 60 * 60 * 24,
     });
-    return privateJson({ ok: true, hasApiKey: Boolean(input.apiKey || current?.apiKey) });
+    return privateJson({ ok: true, hasApiKey: Boolean(effectiveApiKey) });
   } catch (error) {
     if (error instanceof RequestSecurityError) return requestSecurityError(error);
     if (error instanceof z.ZodError) return privateJson({ error: error.issues[0]?.message || "设置格式不正确" }, { status: 400 });

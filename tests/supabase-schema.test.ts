@@ -16,6 +16,21 @@ const syncRoute = readFileSync(
   "utf8",
 ).toLowerCase();
 
+const quotaMigration = readFileSync(
+  new URL("../supabase/migrations/20260908113451_ai_usage_quota.sql", import.meta.url),
+  "utf8",
+).toLowerCase();
+
+const quotaTest = readFileSync(
+  new URL("../supabase/tests/ai_usage_quota.test.sql", import.meta.url),
+  "utf8",
+).toLowerCase();
+
+const jobCacheMigration = readFileSync(
+  new URL("../supabase/migrations/20260909123919_job_postings_cache.sql", import.meta.url),
+  "utf8",
+).toLowerCase();
+
 describe("Supabase workspace schema", () => {
   it("keeps the public table inaccessible to anonymous users", () => {
     expect(migration).toContain("enable row level security");
@@ -56,5 +71,25 @@ describe("Supabase workspace schema", () => {
     expect(syncRoute).toContain("export async function delete");
     expect(syncRoute).toContain('.delete().eq("user_id", userid)');
     expect(syncRoute).toContain("请先登录后再删除云端数据");
+  });
+
+  it("keeps shared AI quota state private and exposes only an authenticated wrapper", () => {
+    expect(quotaMigration).toContain("create table if not exists private.ai_usage_quotas");
+    expect(quotaMigration).toContain("security definer");
+    expect(quotaMigration).toContain("set search_path = ''");
+    expect(quotaMigration).toContain("revoke execute on function public.consume_ai_quota() from public, anon");
+    expect(quotaMigration).toContain("grant execute on function public.consume_ai_quota() to authenticated");
+    expect(quotaTest).toContain("anonymous visitors cannot consume shared ai quota");
+    expect(quotaTest).toContain("another user receives an independent quota bucket");
+  });
+
+  it("keeps the live-job cache server-only and indexed for active reads", () => {
+    expect(jobCacheMigration).toContain("create table if not exists public.job_postings");
+    expect(jobCacheMigration).toContain("enable row level security");
+    expect(jobCacheMigration).toContain("force row level security");
+    expect(jobCacheMigration).toContain("revoke all on table public.job_postings from public, anon, authenticated");
+    expect(jobCacheMigration).toContain("grant select, insert, update, delete on table public.job_postings to service_role");
+    expect(jobCacheMigration).toContain("unique (source, source_feed, external_id)");
+    expect(jobCacheMigration).toContain("where is_active");
   });
 });

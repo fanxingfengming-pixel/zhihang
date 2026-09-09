@@ -13,6 +13,9 @@ describe("workspace sync contract", () => {
       careerIntelligence: null,
       interviewHistory: [],
       offerHistory: [],
+      customJobs: [],
+      offerDrafts: [],
+      savedJobIds: [],
     });
 
     expect(result.success).toBe(true);
@@ -20,5 +23,18 @@ describe("workspace sync contract", () => {
 
   it("rejects unknown snapshot versions and partial payloads", () => {
     expect(WorkspaceSnapshotSchema.safeParse({ version: 2 }).success).toBe(false);
+  });
+
+  it("keeps older version-1 cloud snapshots compatible while defaulting new collections", () => {
+    const result = WorkspaceSnapshotSchema.parse({
+      version: 1,
+      exportedAt: "2026-09-07T00:00:00.000Z",
+      profile: DEFAULT_CAREER_PROFILE,
+      applications: DEFAULT_APPLICATIONS,
+      careerIntelligence: null,
+      interviewHistory: [],
+      offerHistory: [],
+    });
+    expect(result).toMatchObject({ customJobs: [], offerDrafts: [], savedJobIds: [] });
   });
 });

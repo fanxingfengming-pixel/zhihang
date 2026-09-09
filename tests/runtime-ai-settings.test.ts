@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getRuntimeAISettings,
   resetRuntimeAISettingsForTests,
   runtimeAISettingsCountForTests,
+  runtimeApiKeysAllowed,
   saveRuntimeAISettings,
   type RuntimeAISettings,
 } from "@/lib/ai/runtime-settings";
@@ -15,7 +16,10 @@ const settings: RuntimeAISettings = {
   demoMode: false,
 };
 
-afterEach(() => resetRuntimeAISettingsForTests());
+afterEach(() => {
+  resetRuntimeAISettingsForTests();
+  vi.unstubAllEnvs();
+});
 
 describe("runtime AI settings", () => {
   it("keeps the process-local secret store bounded", () => {
@@ -25,5 +29,13 @@ describe("runtime AI settings", () => {
     expect(runtimeAISettingsCountForTests()).toBe(1_000);
     expect(getRuntimeAISettings("session-0")).toBeUndefined();
     expect(getRuntimeAISettings("session-1000")).toEqual(settings);
+  });
+
+  it("disables ephemeral browser-provided keys in production by default", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ALLOW_RUNTIME_API_KEYS", "");
+    expect(runtimeApiKeysAllowed()).toBe(false);
+    vi.stubEnv("ALLOW_RUNTIME_API_KEYS", "true");
+    expect(runtimeApiKeysAllowed()).toBe(true);
   });
 });

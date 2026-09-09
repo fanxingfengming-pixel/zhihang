@@ -1,7 +1,39 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+const exportProfile = {
+  basics: {
+    name: "李明",
+    school: "示例大学",
+    major: "信息管理与信息系统",
+    grade: "大三",
+    targetRole: "AI 产品实习生",
+    location: "杭州",
+    industry: "人工智能",
+    careerStage: "在校生",
+  },
+  skills: ["Figma", "数据分析", "AI Agent"],
+  strengths: ["能够把用户访谈证据转化为产品需求"],
+  projects: [{
+    title: "大学生求职助手",
+    organization: "校级创新项目",
+    period: "2026.03—2026.08",
+    role: "产品负责人",
+    details: ["访谈学生并整理核心求职痛点", "完成产品原型与智能体工作流设计"],
+    result: "交付可运行的求职实训 MVP",
+  }],
+  resumeMarkdown: "",
+  updatedAt: "2026-09-09T00:00:00.000Z",
+};
+
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/jobs?**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ jobs: [], fetchedAt: "2026-09-09T00:00:00.000Z", cached: true, sources: [], warnings: [] }),
+    });
+  });
   await page.goto("/");
   await page.evaluate(() => {
     window.localStorage.clear();
@@ -27,6 +59,60 @@ test("新用户从空白真实状态开始，浏览页面不会自动调用 Agen
   await page.goto("/interview");
   await expect(page.getByRole("button", { name: "生成面试题" })).toBeVisible();
   expect(agentCalls).toEqual([]);
+});
+
+test("工作台自由对话接入 Agent 且不自动发送完整档案", async ({ page }) => {
+  const settingsResponse = await page.request.post("/api/settings/ai", {
+    headers: { Origin: "http://localhost:3000" },
+    data: {
+      provider: "qwen",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen-plus",
+      demoMode: true,
+    },
+  });
+  expect(settingsResponse.ok()).toBeTruthy();
+
+  let chatBody: Record<string, unknown> | undefined;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/chat")) chatBody = request.postDataJSON() as Record<string, unknown>;
+  });
+  await page.goto("/workspace");
+  await page.getByRole("textbox", { name: "向 AI 提问" }).fill("项目经历怎么写？");
+  await page.getByRole("button", { name: "发送消息" }).click();
+
+  await expect(page.locator(".chat-messages")).toContainText("项目背景—你的任务—个人行动—可核验结果");
+  await expect(page.locator(".chat-area > span")).toContainText("演示引擎已回复");
+  expect(chatBody).toEqual({ messages: expect.any(Array) });
+  expect(chatBody).not.toHaveProperty("context");
+  expect(JSON.stringify(chatBody)).not.toContain("Career Profile");
+});
+
+test("已保存的 Career Profile 可以导出 PDF 和 DOCX", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto("/workspace");
+  await page.evaluate((savedProfile) => {
+    window.localStorage.setItem("zhihang-career-profile:v1", JSON.stringify(savedProfile));
+  }, exportProfile);
+  await page.reload();
+
+  const pdfDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 PDF" }).click();
+  const pdfDownload = await pdfDownloadPromise;
+  expect(pdfDownload.suggestedFilename()).toBe("李明-AI 产品实习生-简历.pdf");
+  const pdfPath = await pdfDownload.path();
+  expect(pdfPath).toBeTruthy();
+  expect((await readFile(pdfPath!)).subarray(0, 4).toString()).toBe("%PDF");
+  await expect(page.getByRole("status").filter({ hasText: "PDF 简历已生成" })).toBeVisible();
+
+  const docxDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出 DOCX" }).click();
+  const docxDownload = await docxDownloadPromise;
+  expect(docxDownload.suggestedFilename()).toBe("李明-AI 产品实习生-简历.docx");
+  const docxPath = await docxDownload.path();
+  expect(docxPath).toBeTruthy();
+  expect((await readFile(docxPath!)).subarray(0, 2).toString()).toBe("PK");
+  await expect(page.getByRole("status").filter({ hasText: "DOCX 简历已生成" })).toBeVisible();
 });
 
 test("真实材料导入到 Offer 比较的核心链路", async ({ page }) => {
