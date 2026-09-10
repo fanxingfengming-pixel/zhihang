@@ -23,5 +23,24 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.116.0
-      - run: supabase start
+      - name: Start Supabase and annotate failures
+        shell: bash
+        run: |
+          set +e
+          supabase start 2>&1 \
+            | sed -E 's/eyJ[A-Za-z0-9_.-]{40,}/[redacted-jwt]/g; s/sb_[A-Za-z0-9_.-]{20,}/[redacted-key]/g' \
+            | tee /tmp/supabase-start.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            details=$(grep -Ei 'error|failed|migration|syntax|relation|function|type|permission|container' /tmp/supabase-start.log \
+              | tail -n 12 \
+              | tr '\n' ' ' \
+              | sed -E 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
+            if [ -z "$details" ]; then
+              details="Supabase local stack failed to start; inspect the authenticated job log."
+            fi
+            echo "::error title=Supabase start failed::$details"
+            exit "$status"
+          fi
       - run: supabase test db
