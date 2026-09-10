@@ -185,9 +185,10 @@ begin
     and event.created_at > now() - interval '2 minutes';
 
   if quota_daily_count >= daily_request_limit then
-    retry_seconds := greatest(1, ceil(extract(epoch from (
-      ((current_usage_date + 1)::timestamp at time zone 'utc') - now()
-    )))::integer;
+    retry_seconds := greatest(
+      1,
+      ceil(extract(epoch from ((current_usage_date + 1)::timestamp at time zone 'utc') - now()))::integer
+    );
     return query select false, 'daily_requests', 0,
       greatest(0, daily_token_limit - quota_daily_tokens),
       greatest(0, monthly_token_limit - quota_monthly_tokens),
@@ -198,9 +199,10 @@ begin
   end if;
 
   if quota_daily_tokens + p_estimated_tokens > daily_token_limit then
-    retry_seconds := greatest(1, ceil(extract(epoch from (
-      ((current_usage_date + 1)::timestamp at time zone 'utc') - now()
-    )))::integer;
+    retry_seconds := greatest(
+      1,
+      ceil(extract(epoch from ((current_usage_date + 1)::timestamp at time zone 'utc') - now()))::integer
+    );
     return query select false, 'daily_tokens',
       greatest(0, daily_request_limit - quota_daily_count),
       greatest(0, daily_token_limit - quota_daily_tokens),
@@ -212,9 +214,10 @@ begin
   end if;
 
   if quota_monthly_tokens + p_estimated_tokens > monthly_token_limit then
-    retry_seconds := greatest(1, ceil(extract(epoch from (
-      ((current_month_start + interval '1 month')::timestamp at time zone 'utc') - now()
-    )))::integer;
+    retry_seconds := greatest(
+      1,
+      ceil(extract(epoch from ((current_month_start + interval '1 month')::timestamp at time zone 'utc') - now()))::integer
+    );
     return query select false, 'monthly_tokens',
       greatest(0, daily_request_limit - quota_daily_count),
       greatest(0, daily_token_limit - quota_daily_tokens), 0,
@@ -225,7 +228,10 @@ begin
   end if;
 
   if quota_minute_count >= user_minute_limit then
-    retry_seconds := greatest(1, ceil(extract(epoch from ((current_minute + interval '1 minute') - now())))::integer;
+    retry_seconds := greatest(
+      1,
+      ceil(extract(epoch from ((current_minute + interval '1 minute') - now()))::integer
+    );
     return query select false, 'user_minute',
       greatest(0, daily_request_limit - quota_daily_count),
       greatest(0, daily_token_limit - quota_daily_tokens),
@@ -235,7 +241,10 @@ begin
   end if;
 
   if identity_count >= identity_minute_limit then
-    retry_seconds := greatest(1, ceil(extract(epoch from ((current_minute + interval '1 minute') - now())))::integer;
+    retry_seconds := greatest(
+      1,
+      ceil(extract(epoch from ((current_minute + interval '1 minute') - now()))::integer
+    );
     return query select false, 'identity_minute',
       greatest(0, daily_request_limit - quota_daily_count),
       greatest(0, daily_token_limit - quota_daily_tokens),
