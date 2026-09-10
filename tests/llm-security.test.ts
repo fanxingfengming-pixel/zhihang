@@ -5,6 +5,7 @@ import { demoResult } from "@/lib/demo";
 import {
   looksLikePromptLeakage,
   privateJson,
+  protectAIContextConsent,
   protectAIDataConsent,
   protectMutation,
   readJsonWithLimit,
@@ -105,6 +106,18 @@ describe("API 资源与浏览器边界", () => {
       headers: { "X-Zhihang-AI-Data-Consent": "granted" },
     });
     expect(() => protectAIDataConsent(granted, false)).not.toThrow();
+  });
+
+  it("档案和 JD 上下文必须与本次显式授权完全一致", () => {
+    const missing = new Request("https://app.example/api/chat", { method: "POST" });
+    expect(() => protectAIContextConsent(missing, { profile: {} })).toThrowError("授权状态不一致");
+
+    const granted = new Request("https://app.example/api/chat", {
+      method: "POST",
+      headers: { "X-Zhihang-AI-Context": "jd,profile" },
+    });
+    expect(() => protectAIContextConsent(granted, { profile: {}, jd: {} })).not.toThrow();
+    expect(() => protectAIContextConsent(missing, undefined)).not.toThrow();
   });
 
   it("所有包含求职资料的 JSON 响应都明确禁止缓存", () => {

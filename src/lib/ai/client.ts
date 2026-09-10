@@ -17,7 +17,7 @@ const DEFAULT_MODELS: Record<Provider, string> = {
   qwen: "qwen-plus",
 };
 
-function configuredModel(provider: Provider) {
+export function configuredModel(provider: Provider) {
   return provider === "qwen"
     ? process.env.QWEN_MODEL || DEFAULT_MODELS.qwen
     : process.env.DEEPSEEK_MODEL || DEFAULT_MODELS.deepseek;

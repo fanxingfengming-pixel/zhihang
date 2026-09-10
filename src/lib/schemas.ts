@@ -233,8 +233,43 @@ export const FreeChatMessageSchema = z.object({
   content: z.string().trim().min(1).max(2_000),
 });
 
+export const FreeChatContextSelectionSchema = z.enum(["profile", "jd"]);
+
+export const FreeChatProfileContextSchema = z.object({
+  targetRole: z.string().max(200),
+  location: z.string().max(120),
+  industry: z.string().max(120).optional(),
+  careerStage: z.string().max(120).optional(),
+  education: z.object({
+    school: z.string().max(200),
+    major: z.string().max(200),
+    grade: z.string().max(120),
+  }),
+  skills: z.array(z.string().max(120)).max(60),
+  strengths: z.array(z.string().max(300)).max(30),
+  projects: z.array(ExperienceSchema).max(20),
+});
+
+export const FreeChatJDContextSchema = z.object({
+  jobTitle: z.string().max(200),
+  company: z.string().max(200),
+  location: z.string().max(200),
+  summary: z.string().max(4_000),
+  responsibilities: z.array(z.string().max(1_000)).max(30),
+  requirements: z.array(z.string().max(1_000)).max(30),
+  keywords: z.array(z.string().max(120)).max(60),
+});
+
+export const FreeChatContextSchema = z.object({
+  profile: FreeChatProfileContextSchema.optional(),
+  jd: FreeChatJDContextSchema.optional(),
+}).strict().refine((value) => Boolean(value.profile || value.jd), {
+  message: "上下文至少需要包含求职档案或当前 JD",
+});
+
 export const FreeChatRequestSchema = z.object({
   messages: z.array(FreeChatMessageSchema).min(1).max(12),
+  context: FreeChatContextSchema.optional(),
 }).superRefine((value, context) => {
   if (value.messages.at(-1)?.role !== "user") {
     context.addIssue({ code: "custom", path: ["messages"], message: "最后一条消息必须来自用户" });
@@ -259,6 +294,10 @@ export type ApplicationManagement = z.infer<typeof ApplicationManagementSchema>;
 export type OfferCandidate = z.infer<typeof OfferCandidateSchema>;
 export type OfferDecision = z.infer<typeof OfferDecisionSchema>;
 export type FreeChatMessage = z.infer<typeof FreeChatMessageSchema>;
+export type FreeChatContextSelection = z.infer<typeof FreeChatContextSelectionSchema>;
+export type FreeChatProfileContext = z.infer<typeof FreeChatProfileContextSchema>;
+export type FreeChatJDContext = z.infer<typeof FreeChatJDContextSchema>;
+export type FreeChatContext = z.infer<typeof FreeChatContextSchema>;
 export type FreeChatRequest = z.infer<typeof FreeChatRequestSchema>;
 export type AgentName = "resume" | "jd" | "match" | "optimize" | "interview" | "career" | "gap" | "plan" | "application" | "offer";
 

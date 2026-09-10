@@ -61,7 +61,7 @@ test("新用户从空白真实状态开始，浏览页面不会自动调用 Agen
   expect(agentCalls).toEqual([]);
 });
 
-test("工作台自由对话接入 Agent 且不自动发送完整档案", async ({ page }) => {
+test("工作台自由对话默认最小披露且只发送用户明确选择的档案与 JD", async ({ page }) => {
   const settingsResponse = await page.request.post("/api/settings/ai", {
     headers: { Origin: "http://localhost:3000" },
     data: {
@@ -86,6 +86,27 @@ test("工作台自由对话接入 Agent 且不自动发送完整档案", async (
   expect(chatBody).toEqual({ messages: expect.any(Array) });
   expect(chatBody).not.toHaveProperty("context");
   expect(JSON.stringify(chatBody)).not.toContain("Career Profile");
+
+  await page.evaluate((savedProfile) => {
+    window.localStorage.setItem("zhihang-career-profile:v1", JSON.stringify(savedProfile));
+  }, exportProfile);
+  await page.reload();
+  await page.getByRole("checkbox", { name: /求职档案/ }).check();
+  await page.getByRole("checkbox", { name: /当前 JD/ }).check();
+  await expect(page.getByText("查看本次将发送的字段")).toBeVisible();
+  chatBody = undefined;
+  await page.getByRole("textbox", { name: "向 AI 提问" }).fill("请基于已授权资料分析我的岗位准备重点");
+  await page.getByRole("button", { name: "发送消息" }).click();
+  await expect(page.locator(".chat-area > span")).toContainText("已基于授权资料");
+  expect(chatBody).toMatchObject({
+    messages: expect.any(Array),
+    context: {
+      profile: { targetRole: "AI 产品实习生" },
+      jd: { company: expect.any(String), jobTitle: expect.any(String) },
+    },
+  });
+  expect(JSON.stringify(chatBody)).not.toContain('"name":"李明"');
+  expect(JSON.stringify(chatBody)).not.toContain("resumeMarkdown");
 });
 
 test("已保存的 Career Profile 可以导出 PDF 和 DOCX", async ({ page }) => {

@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { ZodError } from "zod";
-import { assertSharedAIKeyAccess } from "@/lib/ai/access-control";
 import {
+  assertSharedAIKeyAccess,
+  estimateAIRequestTokens,
+  finalizeSharedAIUsage,
+  type SharedAIReservation,
+} from "@/lib/ai/access-control";
+import {
+  configuredModel,
   DEFAULT_PROVIDER,
   generateTextWithMetrics,
   hasProviderKey,
@@ -15,6 +21,7 @@ import { logAIRequest } from "@/lib/observability";
 import {
   looksLikePromptLeakage,
   privateJson,
+  protectAIContextConsent,
   protectAIDataConsent,
   protectMutation,
   readJsonWithLimit,
@@ -32,10 +39,12 @@ export async function POST(request: Request) {
   let logProvider = "unknown";
   let logModel: string | undefined;
   let logDemo = true;
+  let reservation: SharedAIReservation | null = null;
 
   try {
     protectMutation(request, "agent-chat", { limit: 15 });
     const body = FreeChatRequestSchema.parse(await readJsonWithLimit(request, 48 * 1024));
+    protectAIContextConsent(request, body.context);
     const sessionId = (await cookies()).get("zhihang_ai_session")?.value;
     const savedRuntimeSettings = getRuntimeAISettings(sessionId);
     const runtimeSettings = savedRuntimeSettings
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
     }
     const provider = configuredProvider as Provider;
     logProvider = provider;
-    logModel = runtimeSettings?.model;
+    logModel = runtimeSettings?.model || configuredModel(provider);
 
     const useDemo = runtimeSettings
       ? runtimeSettings.demoMode || !hasProviderKey(provider, runtimeSettings)
@@ -60,7 +69,14 @@ export async function POST(request: Request) {
       if (runtimeSettings?.model && !isAllowedSharedModel(provider, runtimeSettings.model)) {
         throw new RequestSecurityError("平台共享密钥不支持该模型，请选择管理员允许的模型或填写自己的 API 密钥。", 400);
       }
-      await assertSharedAIKeyAccess();
+      reservation = await assertSharedAIKeyAccess({
+        request,
+        requestId,
+        agent: "free-chat",
+        provider,
+        model: logModel,
+        estimatedTokens: estimateAIRequestTokens(body, 900),
+      });
     }
 
     let message: string;
@@ -83,6 +99,13 @@ export async function POST(request: Request) {
 
     const safeMessage = redactSecrets(message).trim().slice(0, 6_000);
     if (!safeMessage) throw new RequestSecurityError("模型没有返回可用内容，请重试。", 502);
+    await finalizeSharedAIUsage(reservation, {
+      status: "success",
+      durationMs: Date.now() - startedAt,
+      promptTokens: usage?.prompt_tokens,
+      completionTokens: usage?.completion_tokens,
+      totalTokens: usage?.total_tokens,
+    });
     logAIRequest({
       requestId,
       agent: "free-chat",
@@ -106,9 +129,20 @@ export async function POST(request: Request) {
           completionTokens: usage.completion_tokens,
           totalTokens: usage.total_tokens,
         } : undefined,
+        contextUsed: [
+          ...(body.context?.profile ? ["profile" as const] : []),
+          ...(body.context?.jd ? ["jd" as const] : []),
+        ],
+        grounded: Boolean(body.context?.profile || body.context?.jd),
+        quota: reservation?.remaining,
       },
     });
   } catch (error) {
+    await finalizeSharedAIUsage(reservation, {
+      status: "error",
+      durationMs: Date.now() - startedAt,
+      errorType: error instanceof Error ? error.name : "UnknownError",
+    });
     logAIRequest({
       requestId,
       agent: "free-chat",

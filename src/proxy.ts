@@ -10,6 +10,7 @@ export const config = {
     "/settings/:path*",
     "/api/sync/:path*",
     "/api/agents/:path*",
+    "/api/chat/:path*",
     "/api/settings/ai/:path*",
     "/api/account/:path*",
     "/auth/:path*",

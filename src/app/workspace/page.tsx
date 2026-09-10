@@ -13,10 +13,11 @@ import { useJobAnalysis } from "@/hooks/use-job-analysis";
 import { runAgent, runFreeChat, type AgentMeta } from "@/lib/agent-client";
 import { careerProfileToMarkdown, careerProfileToResumeDraft, saveCareerProfile } from "@/lib/career-profile-store";
 import { runJobAnalysis, type JobAnalysisResult } from "@/lib/job-analysis";
+import { buildSelectedFreeChatContext, describeFreeChatContext } from "@/lib/free-chat-context";
 import { buildResumeFilename, hasResumeExportContent } from "@/lib/resume-export/content";
 import { jobs } from "@/lib/ui-data";
 import type { ResumeDraft } from "@/lib/resume-draft";
-import type { CareerProfile, FreeChatMessage, ResumeOptimization } from "@/lib/schemas";
+import type { CareerProfile, FreeChatContextSelection, FreeChatMessage, ResumeOptimization } from "@/lib/schemas";
 
 type OptimizationView = {
   data: ResumeOptimization;
@@ -64,6 +65,7 @@ function WorkspaceContent() {
   const [chatting, setChatting] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatMeta, setChatMeta] = useState<AgentMeta | null>(null);
+  const [chatContextSelections, setChatContextSelections] = useState<FreeChatContextSelection[]>([]);
   const [builderOpen, setBuilderOpen] = useState(params.get("mode") === "build");
   const [importOpen, setImportOpen] = useState(false);
   const [generated, setGenerated] = useState(false);
@@ -91,6 +93,23 @@ function WorkspaceContent() {
   const primaryChange = optimization?.changes.find((change) => change.section.includes("项目")) || optimization?.changes[0];
   const improvementCount = optimization?.changes.length || analysis?.match.resumeTips.length || analysis?.match.gaps.length || 0;
   const optimizationReasons = optimization?.changes.map((change) => change.reason).filter(Boolean) || analysis?.match.resumeTips || [];
+  const profileContextAvailable = Boolean(
+    profile.updatedAt || profile.basics.targetRole || profile.skills.length || profile.projects.length,
+  );
+  const chatContext = buildSelectedFreeChatContext(
+    chatContextSelections,
+    profile,
+    selectedJob,
+    analysis?.jd,
+  );
+  const chatContextPreview = describeFreeChatContext(chatContext);
+
+  function toggleChatContext(selection: FreeChatContextSelection) {
+    setChatContextSelections((current) => current.includes(selection)
+      ? current.filter((item) => item !== selection)
+      : [...current, selection]);
+    setChatMeta(null);
+  }
 
   async function analyzeSelectedJob(force = false) {
     if (analysisLoading) return;
@@ -156,7 +175,7 @@ function WorkspaceContent() {
     setChatting(true);
     setChatError("");
     try {
-      const response = await runFreeChat(nextMessages);
+      const response = await runFreeChat(nextMessages, chatContext);
       setMessages((current) => [...current, assistantMessage(response.message)]);
       setChatMeta(response.meta);
     } catch (error) {
@@ -311,13 +330,38 @@ function WorkspaceContent() {
             <div className="suggestion-actions">{editing ? <><button onClick={cancelManualEdit}>取消编辑</button><button onClick={saveManualEdit} disabled={!projectText.trim()}><Save size={14} />保存修改</button></> : <><button onClick={() => void generateOptimization()} disabled={!analysis || optimizing}><RefreshCw size={14} className={optimizing ? "spin" : ""} />重新生成</button><button onClick={startManualEdit} disabled={!primaryProject}><Pencil size={14} />手动编辑</button></>}</div>
           </div>
           <div className="chat-area">
+            <div className="chat-context-control">
+              <div><b>本次对话可用资料</b><small>默认关闭，由你逐项授权</small></div>
+              <label className={profileContextAvailable ? "" : "disabled"}>
+                <input
+                  type="checkbox"
+                  checked={chatContextSelections.includes("profile")}
+                  disabled={!profileContextAvailable || chatting}
+                  onChange={() => toggleChatContext("profile")}
+                />
+                <span><b>求职档案</b><small>不发送姓名和整份简历正文</small></span>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={chatContextSelections.includes("jd")}
+                  disabled={chatting}
+                  onChange={() => toggleChatContext("jd")}
+                />
+                <span><b>当前 JD</b><small>{selectedJob.company} · {selectedJob.role}</small></span>
+              </label>
+              {chatContextPreview.length ? <details>
+                <summary>查看本次将发送的字段</summary>
+                <div>{chatContextPreview.map((row) => <p key={row}>{row}</p>)}</div>
+              </details> : <p className="chat-context-empty">未选择资料，只发送你输入的最近对话。</p>}
+            </div>
             <div className="chat-messages" aria-live="polite">
               {messages.slice(-6).map((item, index) => <p className={item.role} key={`${item.role}-${item.content}-${index}`}><b>{item.role === "user" ? "你" : "AI"}：</b>{item.content}</p>)}
               {chatting ? <p className="assistant chat-thinking"><b>AI：</b>正在思考…</p> : null}
             </div>
             {chatError ? <p className="chat-error" role="alert">{chatError}</p> : null}
             <div className="chat-input"><input name="workspace-question" aria-label="向 AI 提问" value={message} onChange={(event) => setMessage(event.target.value)} autoComplete="off" maxLength={2_000} disabled={chatting} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void sendMessage(); } }} placeholder="问简历、岗位或面试问题…" /><button onClick={() => void sendMessage()} aria-label="发送消息" disabled={chatting || !message.trim()}>{chatting ? <RefreshCw size={15} className="spin" /> : <Send size={15} />}</button></div>
-            <span><MessageCircleMore size={12} aria-hidden="true" />{chatMeta ? `${chatMeta.demo ? "演示引擎" : chatMeta.provider === "qwen" ? "Qwen" : "DeepSeek"}已回复` : "自由对话已接入，默认使用 Qwen"}；仅发送你输入的对话，不自动附带档案</span>
+            <span><MessageCircleMore size={12} aria-hidden="true" />{chatMeta ? `${chatMeta.demo ? "演示引擎" : chatMeta.provider === "qwen" ? "Qwen" : "DeepSeek"}已回复${chatMeta.grounded ? " · 已基于授权资料" : " · 未使用档案"}` : "自由对话默认不读取资料；AI 结果请核实"}</span>
           </div>
         </aside>
       </section>

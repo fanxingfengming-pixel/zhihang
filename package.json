@@ -16,7 +16,8 @@
     "test:evals": "vitest run tests/prompt-evals.test.ts",
     "test:evals:live": "node scripts/run-live-evals.mjs",
     "test:e2e": "playwright test",
-    "test:supabase:live": "node --env-file=.env.local node_modules/@playwright/test/cli.js test e2e/supabase-live.spec.ts"
+    "test:supabase:live": "node --env-file=.env.local node_modules/@playwright/test/cli.js test e2e/supabase-live.spec.ts",
+    "check:production": "node --env-file-if-exists=.env.local scripts/check-production-env.mjs"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "5.3.0",

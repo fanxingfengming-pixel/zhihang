@@ -474,6 +474,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .suggestion-actions button { height: 31px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--line); border-radius: 8px; background: white; color: #667d90; font-size: 12px; }
 .suggestion-actions button:disabled { cursor: not-allowed; opacity: .5; }
 .chat-area { margin-top: auto; padding-top: 15px; }
+.chat-context-control { margin-bottom: 10px; padding: 10px; display: grid; gap: 8px; border: 1px solid #dfe8ef; border-radius: 12px; background: #f6f9fb; }
+.chat-context-control > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.chat-context-control > div:first-child b { color: var(--ink); font-size: 12px; }
+.chat-context-control small, .chat-context-empty { color: #7f909e; font-size: 11px; }
+.chat-context-control label { padding: 7px 8px; display: flex; align-items: center; gap: 8px; border: 1px solid #e0e8ee; border-radius: 9px; background: white; cursor: pointer; }
+.chat-context-control label.disabled { opacity: .55; cursor: not-allowed; }
+.chat-context-control label input { accent-color: var(--ink); }
+.chat-context-control label span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.chat-context-control label b { font-size: 12px; }
+.chat-context-control details { color: #627789; font-size: 11px; }
+.chat-context-control summary { cursor: pointer; }
+.chat-context-control details div { max-height: 112px; margin-top: 6px; padding: 7px; overflow: auto; border-radius: 7px; background: #edf3f7; }
+.chat-context-control details p, .chat-context-empty { margin: 0; line-height: 1.55; }
 .chat-messages { max-height: 178px; overflow-y: auto; }
 .chat-messages p { margin: 5px 0; padding: 7px 9px; border-radius: 8px; background: #eef3f7; color: #5a7186; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-messages p.user { margin-left: 22px; background: #dfeaf2; color: #3d5e78; }
@@ -651,6 +664,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .cloud-login-form label span { color: #5f7488; font-size: 12px; font-weight: 750; }
 .cloud-login-form input { width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfd; color: var(--ink); font-size: 12px; }
 .cloud-login-form > div { display: flex; gap: 8px; }
+.cloud-login-form .turnstile-field { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.turnstile-field small { color: #7b8d9d; font-size: 11px; }
 .danger-button { min-height: 38px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #ead5d1; border-radius: 10px; background: #fbf3f1; color: #995f57; font-size: 12px; font-weight: 750; }
 .danger-button:disabled { opacity: .55; cursor: not-allowed; }
 .data-management-card { max-width: 1054px; margin-top: 24px; overflow: hidden; border: 1px solid var(--line); border-radius: 19px; background: white; box-shadow: var(--shadow); }

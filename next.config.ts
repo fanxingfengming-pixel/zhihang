@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
 
 const scriptPolicy = process.env.NODE_ENV === "development"
-  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-  : "script-src 'self' 'unsafe-inline'";
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
+  : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com";
 const connectPolicy = process.env.NODE_ENV === "development"
-  ? "connect-src 'self' ws: wss: https://*.supabase.co"
-  : "connect-src 'self' wss://*.supabase.co https://*.supabase.co";
+  ? "connect-src 'self' ws: wss: https://*.supabase.co https://challenges.cloudflare.com"
+  : "connect-src 'self' wss://*.supabase.co https://*.supabase.co https://challenges.cloudflare.com";
 const contentSecurityPolicy = [
   "default-src 'self'",
   scriptPolicy,
@@ -18,6 +18,7 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
+  "frame-src https://challenges.cloudflare.com",
 ].join("; ");
 
 const nextConfig: NextConfig = {

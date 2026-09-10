@@ -83,7 +83,10 @@ export function SettingsPanel({
     const saved = await saveSettings();
     if (!saved) { setTesting(false); return; }
     try {
-      const response = await fetch("/api/settings/ai/test", { method: "POST" });
+      const response = await fetch("/api/settings/ai/test", {
+        method: "POST",
+        headers: { "X-Zhihang-AI-Data-Consent": dataConsent ? "granted" : "missing" },
+      });
       const payload = (await response.json()) as { message?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "连接失败");
       setStatus({ type: "success", message: payload.message || "连接成功" });

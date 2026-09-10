@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 const NO_STORE_HEADERS = {
   "Cache-Control": "private, no-store, max-age=0",
   Pragma: "no-cache",
@@ -32,6 +34,15 @@ function requestIdentity(request: Request) {
   const forwarded = request.headers.get("x-vercel-forwarded-for") || request.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
   return request.headers.get("user-agent")?.slice(0, 160) || "unknown";
+}
+
+export function requestIdentityHash(request: Request) {
+  const configuredSecret = process.env.RATE_LIMIT_HASH_SECRET?.trim();
+  if (process.env.NODE_ENV === "production" && (!configuredSecret || configuredSecret.length < 32)) {
+    throw new RequestSecurityError("共享模型限流服务尚未安全配置，请联系管理员。", 503);
+  }
+  const secret = configuredSecret || "zhihang-development-rate-limit";
+  return createHmac("sha256", secret).update(requestIdentity(request)).digest("hex");
 }
 
 export function protectMutation(
@@ -77,6 +88,21 @@ export function protectMutation(
 export function protectAIDataConsent(request: Request, useDemo: boolean) {
   if (!useDemo && request.headers.get("x-zhihang-ai-data-consent") !== "granted") {
     throw new RequestSecurityError("请先到设置页确认真实模型数据发送说明。", 428);
+  }
+}
+
+export function protectAIContextConsent(request: Request, context?: { profile?: unknown; jd?: unknown }) {
+  const expected = [
+    ...(context?.profile ? ["profile"] : []),
+    ...(context?.jd ? ["jd"] : []),
+  ].sort();
+  const granted = (request.headers.get("x-zhihang-ai-context") || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort();
+  if (expected.join(",") !== granted.join(",")) {
+    throw new RequestSecurityError("本次对话的档案或 JD 授权状态不一致，请重新选择后发送。", 428);
   }
 }
 

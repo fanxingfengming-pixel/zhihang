@@ -1,4 +1,5 @@
-import type { AgentName, FreeChatMessage } from "@/lib/schemas";
+import type { AgentName, FreeChatContext, FreeChatContextSelection, FreeChatMessage } from "@/lib/schemas";
+import { freeChatContextSelections } from "@/lib/free-chat-context";
 import { hasAIDataConsent } from "@/lib/ai-data-consent";
 
 export type AgentMeta = {
@@ -9,6 +10,13 @@ export type AgentMeta = {
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+  };
+  contextUsed?: FreeChatContextSelection[];
+  grounded?: boolean;
+  quota?: {
+    dailyRequests?: number;
+    dailyTokens?: number;
+    monthlyTokens?: number;
   };
 };
 
@@ -37,14 +45,19 @@ export async function runAgent<T>(agent: AgentName, input: unknown, context?: un
   return payload;
 }
 
-export async function runFreeChat(messages: FreeChatMessage[]): Promise<{ message: string; meta: AgentMeta }> {
+export async function runFreeChat(
+  messages: FreeChatMessage[],
+  context?: FreeChatContext,
+): Promise<{ message: string; meta: AgentMeta }> {
+  const selections = freeChatContextSelections(context);
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Zhihang-AI-Data-Consent": hasAIDataConsent() ? "granted" : "missing",
+      "X-Zhihang-AI-Context": selections.join(","),
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, ...(context ? { context } : {}) }),
   });
   const payload = await response.json() as { message?: string; meta?: AgentMeta; error?: string };
   if (!response.ok || !payload.message || !payload.meta) {

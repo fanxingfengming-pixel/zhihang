@@ -1,13 +1,14 @@
 "use client";
 
 import { CheckCircle2, CloudDownload, CloudUpload, Database, LoaderCircle, LogIn, LogOut, ShieldCheck, Trash2, UserPlus } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { TurnstileCaptcha } from "@/components/turnstile-captcha";
 import { createClient } from "@/lib/supabase/client";
 import { exportWorkspaceSnapshot, hasLocalWorkspaceBackup, importWorkspaceSnapshot, restoreLocalWorkspaceBackup, type WorkspaceSnapshot } from "@/lib/workspace-sync";
 
 type Status = { type: "idle" | "success" | "error"; message: string };
 
-export function CloudSyncPanel({ configured }: { configured: boolean }) {
+export function CloudSyncPanel({ configured, captchaSiteKey = "" }: { configured: boolean; captchaSiteKey?: string }) {
   if (!configured) {
     return (
       <section className="cloud-settings-card" id="cloud-sync">
@@ -28,10 +29,10 @@ export function CloudSyncPanel({ configured }: { configured: boolean }) {
     );
   }
 
-  return <ConfiguredCloudSyncPanel />;
+  return <ConfiguredCloudSyncPanel captchaSiteKey={captchaSiteKey} />;
 }
 
-function ConfiguredCloudSyncPanel() {
+function ConfiguredCloudSyncPanel({ captchaSiteKey }: { captchaSiteKey: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,6 +42,14 @@ function ConfiguredCloudSyncPanel() {
   const [cloudUpdatedAt, setCloudUpdatedAt] = useState<string | null>(null);
   const [hasBackup, setHasBackup] = useState(false);
   const [status, setStatus] = useState<Status>({ type: "idle", message: "" });
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
+  const handleCaptchaToken = useCallback((token: string) => setCaptchaToken(token), []);
+
+  function resetCaptcha() {
+    setCaptchaToken("");
+    setCaptchaResetKey((value) => value + 1);
+  }
 
   useEffect(() => {
     let active = true;
@@ -83,15 +92,27 @@ function ConfiguredCloudSyncPanel() {
       setStatus({ type: "error", message: "请输入有效邮箱，密码至少 8 位。" });
       return;
     }
+    if (captchaSiteKey && !captchaToken) {
+      setStatus({ type: "error", message: "请先完成安全验证。" });
+      return;
+    }
     setBusy(true);
     setStatus({ type: "idle", message: "" });
     const result = mode === "signup"
       ? await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { emailRedirectTo: `${window.location.origin}/auth/confirm?next=/settings` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/settings`,
+          captchaToken: captchaToken || undefined,
+        },
       })
-      : await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      : await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+        options: { captchaToken: captchaToken || undefined },
+      });
+    resetCaptcha();
     setBusy(false);
     if (result.error) {
       const message = /invalid login credentials/i.test(result.error.message)
@@ -114,10 +135,16 @@ function ConfiguredCloudSyncPanel() {
       setStatus({ type: "error", message: "请先填写需要找回密码的邮箱。" });
       return;
     }
+    if (captchaSiteKey && !captchaToken) {
+      setStatus({ type: "error", message: "请先完成安全验证。" });
+      return;
+    }
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/auth/confirm?next=/auth/update-password`,
+      captchaToken: captchaToken || undefined,
     });
+    resetCaptcha();
     setBusy(false);
     setStatus(error
       ? { type: "error", message: "密码重置邮件发送失败，请稍后重试。" }
@@ -241,6 +268,7 @@ function ConfiguredCloudSyncPanel() {
         <form className="cloud-login-form" onSubmit={(event: FormEvent) => { event.preventDefault(); void authenticate("signin"); }}>
           <label><span>邮箱</span><input name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" spellCheck={false} placeholder="name@example.com" /></label>
           <label><span>密码</span><input name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" minLength={8} placeholder="至少 8 位…" /></label>
+          {captchaSiteKey ? <TurnstileCaptcha siteKey={captchaSiteKey} resetKey={captchaResetKey} onToken={handleCaptchaToken} /> : null}
           <div>
             <button type="submit" className="primary-button" disabled={busy}><LogIn size={15} />登录</button>
             <button type="button" className="secondary-button" disabled={busy} onClick={() => authenticate("signup")}><UserPlus size={15} />注册</button>
