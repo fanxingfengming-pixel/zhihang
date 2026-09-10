@@ -230,7 +230,7 @@ begin
   if quota_minute_count >= user_minute_limit then
     retry_seconds := greatest(
       1,
-      ceil(extract(epoch from ((current_minute + interval '1 minute') - now()))::integer
+      ceil(extract(epoch from ((current_minute + interval '1 minute') - now())))::integer
     );
     return query select false, 'user_minute',
       greatest(0, daily_request_limit - quota_daily_count),
@@ -243,7 +243,7 @@ begin
   if identity_count >= identity_minute_limit then
     retry_seconds := greatest(
       1,
-      ceil(extract(epoch from ((current_minute + interval '1 minute') - now()))::integer
+      ceil(extract(epoch from ((current_minute + interval '1 minute') - now())))::integer
     );
     return query select false, 'identity_minute',
       greatest(0, daily_request_limit - quota_daily_count),
