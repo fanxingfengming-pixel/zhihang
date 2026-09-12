@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; auth?: string; reason?: string }>;
+  searchParams: Promise<{ next?: string; auth?: string; reason?: string; mode?: string }>;
 }) {
   const params = await searchParams;
   const initialMessage = params.auth === "error"
@@ -20,6 +20,7 @@ export default async function LoginPage({
     <LoginForm
       configured={isSupabaseConfigured()}
       nextPath={safeInternalPath(params.next)}
+      initialMode={params.mode === "signup" ? "signup" : "signin"}
       captchaSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || ""}
       initialMessage={initialMessage}
     />

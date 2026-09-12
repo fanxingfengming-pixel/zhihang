@@ -97,6 +97,7 @@ QWEN_BASE_URL=https://你的WorkspaceId.cn-beijing.maas.aliyuncs.com/compatible-
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=你的项目地址
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的公开密钥
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
 
 然后按文件名顺序执行 `supabase/migrations/` 中的全部迁移。登录与同步入口位于 `/settings#cloud-sync`；同步内容包括 Career Profile、投递、职业与面试历史、自定义 JD、Offer 草稿和岗位收藏，不包括 DeepSeek/Qwen API 密钥。完整步骤见 `DEPLOYMENT.md`。

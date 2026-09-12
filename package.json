@@ -16,7 +16,7 @@
     "test:evals": "vitest run tests/prompt-evals.test.ts",
     "test:evals:live": "node scripts/run-live-evals.mjs",
     "test:e2e": "playwright test",
-    "test:supabase:live": "node --env-file=.env.local node_modules/@playwright/test/cli.js test e2e/supabase-live.spec.ts",
+    "test:supabase:live": "node --env-file=.env.local node_modules/@playwright/test/cli.js test e2e/supabase-live.spec.ts e2e/email-confirmation-live.spec.ts",
     "test:supabase:production": "node scripts/run-production-supabase-e2e.mjs",
     "check:production": "node --env-file-if-exists=.env.local scripts/check-production-env.mjs"
   },

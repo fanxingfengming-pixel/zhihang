@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { safeInternalPath } from "@/lib/auth-navigation";
 import { getSupabaseConfig, isSupabaseConfigured } from "@/lib/supabase/config";
 
-const PUBLIC_PATHS = new Set(["/login", "/auth/confirm"]);
+const PUBLIC_PATHS = new Set(["/login", "/verify-email", "/auth/confirm", "/auth/confirmed"]);
 const PUBLIC_API_PATHS = new Set(["/api/health", "/api/cron/jobs"]);
 
 function isPublicPath(pathname: string) {

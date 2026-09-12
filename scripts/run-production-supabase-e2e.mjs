@@ -7,6 +7,7 @@ const args = [
   playwrightCli,
   "test",
   "e2e/supabase-live.spec.ts",
+  "e2e/email-confirmation-live.spec.ts",
 ];
 
 const child = spawn(process.execPath, args, {

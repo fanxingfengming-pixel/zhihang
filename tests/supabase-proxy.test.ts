@@ -12,7 +12,7 @@ describe("Supabase session refresh coverage", () => {
   });
 
   it("keeps only login, auth confirmation, health and signed cron entry points public", () => {
-    expect(sessionProxySource).toContain('new Set(["/login", "/auth/confirm"])');
+    expect(sessionProxySource).toContain('new Set(["/login", "/verify-email", "/auth/confirm", "/auth/confirmed"])');
     expect(sessionProxySource).toContain('new Set(["/api/health", "/api/cron/jobs"])');
   });
 });

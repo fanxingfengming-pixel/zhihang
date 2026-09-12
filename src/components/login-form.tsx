@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { TurnstileCaptcha } from "@/components/turnstile-captcha";
-import { safeInternalPath } from "@/lib/auth-navigation";
+import { buildAuthCallbackUrl, PENDING_VERIFICATION_EMAIL_KEY, safeInternalPath } from "@/lib/auth-navigation";
 import { bindLocalWorkspaceToUser } from "@/lib/local-data-manager";
 import { createClient } from "@/lib/supabase/client";
 
@@ -23,17 +23,19 @@ function authErrorMessage(message: string) {
 export function LoginForm({
   configured,
   nextPath,
+  initialMode = "signin",
   captchaSiteKey = "",
   initialMessage = "",
 }: {
   configured: boolean;
   nextPath: string;
+  initialMode?: AuthMode;
   captchaSiteKey?: string;
   initialMessage?: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => configured ? createClient() : null, [configured]);
-  const [mode, setMode] = useState<AuthMode>("signin");
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,6 +46,7 @@ export function LoginForm({
   );
   const handleCaptchaToken = useCallback((token: string) => setCaptchaToken(token), []);
   const destination = safeInternalPath(nextPath);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || (typeof window === "undefined" ? "http://localhost:3000" : window.location.origin);
 
   function resetCaptcha() {
     setCaptchaToken("");
@@ -78,7 +81,7 @@ export function LoginForm({
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(destination)}`,
+          emailRedirectTo: buildAuthCallbackUrl(siteUrl, destination),
           captchaToken: captchaToken || undefined,
         },
       })
@@ -98,8 +101,8 @@ export function LoginForm({
       enterWorkspace(result.data.user.id);
       return;
     }
-    setPassword("");
-    setStatus({ type: "success", message: "注册成功，请打开验证邮件后继续登录。" });
+    window.sessionStorage.setItem(PENDING_VERIFICATION_EMAIL_KEY, email.trim());
+    router.replace(`/verify-email?next=${encodeURIComponent(destination)}`);
   }
 
   async function resetPassword() {
@@ -118,7 +121,7 @@ export function LoginForm({
 
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/confirm?next=/auth/update-password`,
+      redirectTo: buildAuthCallbackUrl(siteUrl, "/auth/update-password"),
       captchaToken: captchaToken || undefined,
     });
     resetCaptcha();
@@ -156,8 +159,8 @@ export function LoginForm({
           </header>
 
           <div className="login-mode-tabs" role="tablist" aria-label="账号操作">
-            <button type="button" className={mode === "signin" ? "active" : ""} onClick={() => { setMode("signin"); setStatus({ type: "idle", message: "" }); }}>登录</button>
-            <button type="button" className={mode === "signup" ? "active" : ""} onClick={() => { setMode("signup"); setStatus({ type: "idle", message: "" }); }}>注册</button>
+            <button type="button" role="tab" className={mode === "signin" ? "active" : ""} aria-selected={mode === "signin"} onClick={() => { setMode("signin"); setStatus({ type: "idle", message: "" }); }}>登录</button>
+            <button type="button" role="tab" className={mode === "signup" ? "active" : ""} aria-selected={mode === "signup"} onClick={() => { setMode("signup"); setStatus({ type: "idle", message: "" }); }}>注册</button>
           </div>
 
           <form className="login-form" onSubmit={authenticate}>

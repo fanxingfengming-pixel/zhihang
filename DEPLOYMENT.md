@@ -19,10 +19,21 @@
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://你的项目.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的公开密钥
+NEXT_PUBLIC_SITE_URL=https://你的生产域名
 SUPABASE_SECRET_KEY=你的服务端SecretKey
 ```
 
 浏览器只使用 Publishable Key 与用户会话。账号删除接口优先使用当前推荐的 `SUPABASE_SECRET_KEY`（`sb_secret_...`）；旧项目可暂时使用 `SUPABASE_SERVICE_ROLE_KEY`。它只能放入未提交的 `.env.local` 或 Vercel 服务端环境变量，**绝不能提交到 Git、写入前端代码或添加 `NEXT_PUBLIC_` 前缀**。
+
+### 邮箱确认与密码重置
+
+在 Supabase Authentication → URL Configuration 中设置：
+
+- Site URL：`https://zhihang-fengming.vercel.app`
+- Redirect URLs：`https://zhihang-fengming.vercel.app/auth/confirm`
+- 本地调试可额外保留：`http://localhost:3000/auth/confirm`
+
+Authentication → Providers → Email 中必须启用 Confirm email。注册后应用会进入 `/verify-email`，支持重新发送确认邮件；确认成功进入 `/auth/confirmed`，密码重置则进入 `/auth/update-password`。生产环境应配置自有 SMTP，避免 Supabase 默认邮件服务的收件人限制、速率限制和模板限制。
 
 `20260909123919_job_postings_cache.sql` 会创建仅服务端可访问的公开岗位缓存表。实时岗位在未配置 Secret Key 时仍可工作，但只使用当前 Next.js 进程的短期缓存；生产环境建议配置 Secret Key，避免冷启动时重复请求上游。
 
