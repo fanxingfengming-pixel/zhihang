@@ -37,15 +37,15 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
-    "@types/node": "22.20.1",
+    "@types/node": "26.4.1",
     "@types/pdfkit": "0.17.6",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
-    "eslint": "9.39.5",
+    "eslint": "10.10.0",
     "eslint-config-next": "16.3.4",
     "pdf-lib": "1.17.1",
     "tailwindcss": "4.3.3",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "5.0.0"
   }
 }
