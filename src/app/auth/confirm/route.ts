@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 function safeNext(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/settings";
+  return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
 export async function GET(request: NextRequest) {
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
       : { error: new Error("Missing confirmation token") };
 
   const destination = request.nextUrl.clone();
-  destination.pathname = result.error ? "/settings" : next;
+  destination.pathname = result.error ? "/login" : next;
   destination.search = result.error ? "?auth=error" : "?auth=confirmed";
-  destination.hash = result.error || next !== "/settings" ? "" : "cloud-sync";
+  destination.hash = "";
   return NextResponse.redirect(destination);
 }

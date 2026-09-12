@@ -7,12 +7,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/settings/:path*",
-    "/api/sync/:path*",
-    "/api/agents/:path*",
-    "/api/chat/:path*",
-    "/api/settings/ai/:path*",
-    "/api/account/:path*",
-    "/auth/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

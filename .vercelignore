@@ -1,0 +1,9 @@
+promo-video/
+.tools/
+e2e/
+tests/
+test-results/
+playwright-report/
+/sources/
+docs/roadshow/
+*.log

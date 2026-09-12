@@ -21,18 +21,46 @@ type SyncPayload = {
   error?: string;
 };
 
+type BrowserApiResponse<T> = {
+  ok: boolean;
+  status: number;
+  data: T;
+};
+
 async function signIn(page: Page, email: string, password: string) {
   await page.goto("/settings#cloud-sync");
+  await expect(page).toHaveURL(/\/login\?next=/);
   await page.getByLabel("邮箱").fill(email);
   await page.getByLabel("密码").fill(password);
-  await page.getByRole("button", { name: "登录" }).click();
-  await expect(page.getByRole("status")).toContainText("登录成功");
+  await page.getByRole("button", { name: "进入职航" }).click();
+  await expect(page).toHaveURL(/\/settings/, { timeout: 20_000 });
+  await expect(page.locator(".sidebar-logout")).toBeVisible({ timeout: 10_000 });
+}
+
+async function callApi<T>(
+  page: Page,
+  path: string,
+  method: "GET" | "PUT" | "DELETE" = "GET",
+  body?: unknown,
+): Promise<BrowserApiResponse<T>> {
+  return page.evaluate(async ({ endpoint, requestMethod, requestBody }) => {
+    const response = await fetch(endpoint, {
+      method: requestMethod,
+      headers: requestBody === undefined ? undefined : { "Content-Type": "application/json" },
+      body: requestBody === undefined ? undefined : JSON.stringify(requestBody),
+    });
+    return {
+      ok: response.ok,
+      status: response.status,
+      data: await response.json() as T,
+    };
+  }, { endpoint: path, requestMethod: method, requestBody: body });
 }
 
 async function readCloud(page: Page) {
-  const response = await page.request.get("/api/sync");
-  expect(response.ok()).toBeTruthy();
-  return response.json() as Promise<SyncPayload>;
+  const response = await callApi<SyncPayload>(page, "/api/sync");
+  expect(response.ok).toBeTruthy();
+  return response.data;
 }
 
 function emptySnapshot(marker: string) {
@@ -82,11 +110,12 @@ test.describe("Supabase 真实账号、同步与 RLS", () => {
           },
         },
       };
-      const writeA = await pageA.request.put("/api/sync", {
-        data: { snapshot, expectedUpdatedAt: originalA.updatedAt },
+      const writeA = await callApi<{ updatedAt: string }>(pageA, "/api/sync", "PUT", {
+        snapshot,
+        expectedUpdatedAt: originalA.updatedAt,
       });
-      expect(writeA.ok()).toBeTruthy();
-      const writtenA = await writeA.json() as { updatedAt: string };
+      expect(writeA.ok).toBeTruthy();
+      const writtenA = writeA.data;
 
       await signIn(pageA2, credentials.userA.email, credentials.userA.password);
       const restoredOnSecondDevice = await readCloud(pageA2);
@@ -97,24 +126,27 @@ test.describe("Supabase 真实账号、同步与 RLS", () => {
       expect(JSON.stringify(isolatedB.data)).not.toContain(marker);
 
       const newerSnapshot = { ...snapshot, exportedAt: new Date(Date.now() + 1_000).toISOString() };
-      const updateA = await pageA.request.put("/api/sync", {
-        data: { snapshot: newerSnapshot, expectedUpdatedAt: writtenA.updatedAt },
+      const updateA = await callApi(pageA, "/api/sync", "PUT", {
+        snapshot: newerSnapshot,
+        expectedUpdatedAt: writtenA.updatedAt,
       });
-      expect(updateA.ok()).toBeTruthy();
+      expect(updateA.ok).toBeTruthy();
 
-      const staleWrite = await pageA2.request.put("/api/sync", {
-        data: { snapshot, expectedUpdatedAt: writtenA.updatedAt },
+      const staleWrite = await callApi(pageA2, "/api/sync", "PUT", {
+        snapshot,
+        expectedUpdatedAt: writtenA.updatedAt,
       });
-      expect(staleWrite.status()).toBe(409);
+      expect(staleWrite.status).toBe(409);
     } finally {
       if (originalA) {
         const current = await readCloud(pageA).catch(() => null);
         if (originalA.data && current?.updatedAt) {
-          await pageA.request.put("/api/sync", {
-            data: { snapshot: originalA.data, expectedUpdatedAt: current.updatedAt },
+          await callApi(pageA, "/api/sync", "PUT", {
+            snapshot: originalA.data,
+            expectedUpdatedAt: current.updatedAt,
           });
         } else if (!originalA.data) {
-          await pageA.request.delete("/api/sync");
+          await callApi(pageA, "/api/sync", "DELETE");
         }
       }
       await Promise.all([contextA.close(), contextA2.close(), contextB.close()]);

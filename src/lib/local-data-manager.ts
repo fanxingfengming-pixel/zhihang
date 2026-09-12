@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { AI_DATA_CONSENT_KEY } from "@/lib/ai-data-consent";
 import { APPLICATION_STORAGE_KEY } from "@/lib/application-store";
-import { removeLocalStorageItem, removeSessionStorageItem } from "@/lib/browser-storage";
+import {
+  readLocalStorageItem,
+  removeLocalStorageItem,
+  removeSessionStorageItem,
+  writeLocalStorageItem,
+} from "@/lib/browser-storage";
 import { CAREER_PROFILE_STORAGE_KEY } from "@/lib/career-profile-store";
 import { CUSTOM_JOB_STORAGE_KEY, CustomJobListSchema, loadCustomJobs } from "@/lib/custom-job-store";
 import {
@@ -42,6 +47,8 @@ const LOCAL_KEYS = [
   "zhihang-offer-history",
 ] as const;
 
+const LOCAL_OWNER_KEY = "zhihang-local-workspace-owner:v1";
+
 export function exportPortableWorkspace(): PortableWorkspace {
   return PortableWorkspaceSchema.parse({
     version: 1,
@@ -61,4 +68,13 @@ export function clearLocalAppData() {
     .filter((key): key is string => Boolean(key?.startsWith("zhihang-job-analysis:")));
   const sessionResults = sessionKeys.map((key) => removeSessionStorageItem(key));
   return [...localResults, ...sessionResults].every(Boolean);
+}
+
+export function bindLocalWorkspaceToUser(userId: string) {
+  if (typeof window === "undefined" || !userId) return { changed: false, cleared: false };
+  const previousUserId = readLocalStorageItem(LOCAL_OWNER_KEY);
+  const changed = Boolean(previousUserId && previousUserId !== userId);
+  const cleared = changed ? clearLocalAppData() : false;
+  writeLocalStorageItem(LOCAL_OWNER_KEY, userId);
+  return { changed, cleared };
 }

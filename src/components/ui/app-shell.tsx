@@ -7,6 +7,8 @@ import {
   ChevronRight,
   Compass,
   Home,
+  LoaderCircle,
+  LogOut,
   Menu,
   MessageCircleMore,
   Mic2,
@@ -17,10 +19,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useCareerProfile } from "@/hooks/use-career-profile";
 import { countProjectsMissingResults } from "@/lib/career-profile-metrics";
 import { STORAGE_FAILURE_EVENT } from "@/lib/browser-storage";
+import { bindLocalWorkspaceToUser } from "@/lib/local-data-manager";
+import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
@@ -35,13 +40,51 @@ const navItems = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const supabase = useMemo(() => isSupabaseConfigured() ? createClient() : null, []);
   const profile = useCareerProfile();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [storageError, setStorageError] = useState(false);
+  const [accountReady, setAccountReady] = useState(!supabase);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const projectsMissingResults = countProjectsMissingResults(profile);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error || !data.user) {
+        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        return;
+      }
+      bindLocalWorkspaceToUser(data.user.id);
+      setAccountEmail(data.user.email || "");
+      setAccountReady(true);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      if (!session?.user) {
+        setAccountReady(false);
+        router.replace("/login");
+        router.refresh();
+        return;
+      }
+      bindLocalWorkspaceToUser(session.user.id);
+      setAccountEmail(session.user.email || "");
+      setAccountReady(true);
+    });
+
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
+  }, [pathname, router, supabase]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -64,6 +107,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     event.preventDefault();
     const query = search.trim();
     if (query) router.push(`/jobs?q=${encodeURIComponent(query)}`);
+  }
+
+  async function signOut() {
+    if (!supabase || signingOut) return;
+    setSigningOut(true);
+    await supabase.auth.signOut();
+    setSigningOut(false);
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (!accountReady) {
+    return <main className="auth-app-loading"><LoaderCircle className="spin" size={24} /><p>正在确认你的职航账号…</p></main>;
   }
 
   return (
@@ -101,8 +157,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-legal"><Link href="/privacy">隐私</Link><span>·</span><Link href="/terms">条款</Link></div>
         <div className="sidebar-user">
           <span className="avatar">{profile.basics.name.trim().slice(0, 1) || "职"}</span>
-          <p><b>{profile.basics.name || "职航同学"}</b><small>{[profile.basics.school, profile.basics.grade].filter(Boolean).join(" · ") || "求职档案待完善"}</small></p>
+          <p><b>{profile.basics.name || "职航同学"}</b><small>{accountEmail || [profile.basics.school, profile.basics.grade].filter(Boolean).join(" · ") || "求职档案待完善"}</small></p>
           <Link href="/settings" aria-label="打开设置"><Settings size={16} /></Link>
+          <button className="sidebar-logout" type="button" onClick={signOut} disabled={signingOut} aria-label="退出账号" title="退出账号"><LogOut size={16} /></button>
         </div>
       </aside>
 
