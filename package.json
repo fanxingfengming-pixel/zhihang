@@ -25,7 +25,7 @@
     "@supabase/ssr": "0.12.6",
     "@supabase/supabase-js": "2.115.0",
     "docx": "9.7.1",
-    "lucide-react": "0.468.0",
+    "lucide-react": "1.41.0",
     "mammoth": "1.12.2",
     "next": "16.3.4",
     "pdf-parse": "2.4.5",
